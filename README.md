@@ -18,3 +18,13 @@ nixops deploy -d wp
 nixops reboot -d wp
 nixops deploy -d wp
 ```
+
+You should see the IP address of the virtual machine in the deploy output. On my machine it's in the 192.168.56.0/24 subnet. If you don't see it, you can do the following:
+
+```
+[me@host]$ nixops ssh -d wp wordpress
+[root@wordpress]# ip a
+```
+
+Now you can hit that IP in a browser and finish the WordPress installation. Once you've finished the installation, go to the plugins section in the admin panel and activate plugins. We need the basic auth plugin to simplify auth while testing.
+
