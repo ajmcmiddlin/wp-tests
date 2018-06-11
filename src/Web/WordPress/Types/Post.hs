@@ -5,7 +5,7 @@
 module Web.WordPress.Types.Post where
 
 import           Data.Aeson (FromJSON (..), ToJSON (..), Value (Bool), object,
-                             (.=))
+                             (.=), (.:), withObject)
 import           Data.Set   (Set)
 import           Data.Text  (Text)
 import           Data.Time  (LocalTime, UTCTime)
@@ -38,6 +38,35 @@ data Post =
   , postTags          :: Text
   }
   deriving Show
+
+instance FromJSON Post where
+  parseJSON =
+    withObject "Post" $ \v ->
+      Post
+        <$> v .: "postDate"
+        <*> v .: "postDateGmt"
+        <*> v .: "postGuid"
+        <*> v .: "postId"
+        <*> v .: "postLink"
+        <*> v .: "postModified"
+        <*> v .: "postModifiedGmt"
+        <*> v .: "postSlug"
+        <*> v .: "postStatus"
+        <*> v .: "postType"
+        <*> v .: "postPassword"
+        <*> v .: "postTitle"
+        <*> v .: "postContent"
+        <*> v .: "postAuthor"
+        <*> v .: "postExcerpt"
+        <*> v .: "postFeaturedMedia"
+        <*> v .: "postCommentStatus"
+        <*> v .: "postPingStatus"
+        <*> v .: "postFormat"
+        <*> v .: "postMeta"
+        <*> v .: "postSticky"
+        <*> v .: "postTemplate"
+        <*> v .: "postCategories"
+        <*> v .: "postTags"
 
 data ListPost =
   ListPost
