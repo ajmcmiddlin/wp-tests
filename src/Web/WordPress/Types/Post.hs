@@ -11,6 +11,11 @@ import           Data.Set       (Set)
 import           Data.Text      (Text)
 import           Data.Time      (LocalTime, UTCTime)
 
+defaultListPosts :: ListPosts
+defaultListPosts =
+  ListPosts Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+            Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+
 data Post =
   Post
   { postDate          :: LocalTime
@@ -69,53 +74,54 @@ instance FromJSON Post where
         <*> v .: "postCategories"
         <*> v .: "postTags"
 
-data ListPost =
-  ListPost
-  { listPostContext           :: Maybe Context
-  , listPostPage              :: Maybe Int
-  , listPostPerPage           :: Maybe Int
-  , listPostSearch            :: Maybe Text
-  , listPostAfter             :: Maybe LocalTime
-  , listPostAuthor            :: Maybe Int
-  , listPostAuthorExclude     :: Maybe (Set Int)
-  , listPostBefore            :: Maybe LocalTime
-  , listPostExclude           :: Maybe (Set Int)
-  , listPostInclude           :: Maybe (Set Int)
-  , listPostOffset            :: Maybe Int
-  , listPostOrder             :: Maybe Order
-  , listPostSlug              :: Maybe (Set Text)
-  , listPostStatus            :: Maybe Status
-  , listPostCategories        :: Maybe (Set Text)
-  , listPostCategoriesExclude :: Maybe (Set Text)
-  , listPostTags              :: Maybe (Set Text)
-  , listPostTagsExclude       :: Maybe (Set Text)
-  , listPostSticky            :: Maybe Sticky
+data ListPosts =
+  ListPosts
+  { listPostsContext           :: Maybe Context
+  , listPostsPage              :: Maybe Int
+  , listPostsPerPage           :: Maybe Int
+  , listPostsSearch            :: Maybe Text
+  , listPostsAfter             :: Maybe LocalTime
+  , listPostsAuthor            :: Maybe Int
+  , listPostsAuthorExclude     :: Maybe (Set Int)
+  , listPostsBefore            :: Maybe LocalTime
+  , listPostsExclude           :: Maybe (Set Int)
+  , listPostsInclude           :: Maybe (Set Int)
+  , listPostsOffset            :: Maybe Int
+  , listPostsOrder             :: Maybe Order
+  , listPostsSlug              :: Maybe (Set Text)
+  , listPostsStatus            :: Maybe Status
+  , listPostsCategories        :: Maybe (Set Text)
+  , listPostsCategoriesExclude :: Maybe (Set Text)
+  , listPostsTags              :: Maybe (Set Text)
+  , listPostsTagsExclude       :: Maybe (Set Text)
+  , listPostsSticky            :: Maybe Sticky
   }
   deriving Show
 
-instance ToJSON ListPost where
-  toJSON ListPost{..} =
-    object
-    [ "context"           .= listPostContext
-    , "page"              .= listPostPage
-    , "per_page"           .= listPostPerPage
-    , "search"            .= listPostSearch
-    , "after"             .= listPostAfter
-    , "author"            .= listPostAuthor
-    , "author_exclude"     .= listPostAuthorExclude
-    , "before"            .= listPostBefore
-    , "exclude"           .= listPostExclude
-    , "include"           .= listPostInclude
-    , "offset"            .= listPostOffset
-    , "order"             .= listPostOrder
-    , "slug"              .= listPostSlug
-    , "status"            .= listPostStatus
-    , "categories"        .= listPostCategories
-    , "categories_exclude" .= listPostCategoriesExclude
-    , "tags"              .= listPostTags
-    , "tags_exclude"       .= listPostTagsExclude
-    , "sticky"            .= listPostSticky
-    ]
+instance ToJSON ListPosts where
+  toJSON ListPosts{..} =
+    object []
+    -- object
+    -- [ "context"            .= listPostsContext
+    -- , "page"               .= listPostsPage
+    -- , "per_page"           .= listPostsPerPage
+    -- , "search"             .= listPostsSearch
+    -- , "after"              .= listPostsAfter
+    -- , "author"             .= listPostsAuthor
+    -- , "author_exclude"     .= listPostsAuthorExclude
+    -- , "before"             .= listPostsBefore
+    -- , "exclude"            .= listPostsExclude
+    -- , "include"            .= listPostsInclude
+    -- , "offset"             .= listPostsOffset
+    -- , "order"              .= listPostsOrder
+    -- , "slug"               .= listPostsSlug
+    -- , "status"             .= listPostsStatus
+    -- , "categories"         .= listPostsCategories
+    -- , "categories_exclude" .= listPostsCategoriesExclude
+    -- , "tags"               .= listPostsTags
+    -- , "tags_exclude"       .= listPostsTagsExclude
+    -- , "sticky"             .= listPostsSticky
+    -- ]
 
 data Status =
     Publish
@@ -154,9 +160,9 @@ instance ToJSON CommentStatus where
 
 instance FromJSON CommentStatus where
   parseJSON v = case v of
-    "open" -> pure CommentsOpen
+    "open"   -> pure CommentsOpen
     "closed" -> pure CommentsClosed
-    _ -> fail $ "Unknown comment status " <> show v
+    _        -> fail $ "Unknown comment status " <> show v
 
 data PingStatus =
     PingsOpen
@@ -170,9 +176,9 @@ instance ToJSON PingStatus where
 
 instance FromJSON PingStatus where
   parseJSON v = case v of
-    "open" -> pure PingsOpen
+    "open"   -> pure PingsOpen
     "closed" -> pure PingsClosed
-    _ -> fail $ "Unknown ping status " <> show v
+    _        -> fail $ "Unknown ping status " <> show v
 
 data Format =
     Standard
@@ -190,16 +196,16 @@ data Format =
 instance FromJSON Format where
   parseJSON v = case v of
     "standard" -> pure Standard
-    "aside" -> pure Aside
-    "chat" -> pure Chat
-    "gallery" -> pure Gallery
-    "link" -> pure Link
-    "image" -> pure Image
-    "quote" -> pure Quote
-    "status" -> pure Status
-    "video" -> pure Video
-    "audio" -> pure Audio
-    _ -> fail $ "Unknown format " <> show v
+    "aside"    -> pure Aside
+    "chat"     -> pure Chat
+    "gallery"  -> pure Gallery
+    "link"     -> pure Link
+    "image"    -> pure Image
+    "quote"    -> pure Quote
+    "status"   -> pure Status
+    "video"    -> pure Video
+    "audio"    -> pure Audio
+    _          -> fail $ "Unknown format " <> show v
 
 data Context =
     View

@@ -1,22 +1,24 @@
 {-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE RecordWildCards #-}
 
-import           Control.Exception     (bracket)
-import           Data.ByteString       (ByteString)
-import           Data.ByteString.Char8 (pack)
-import           Database.MySQL.Base   (Connection, close, connect,
-                                        connectDatabase, connectHost,
-                                        connectPassword, connectUser,
-                                        defaultConnectInfo, query)
-import           Network.HTTP.Client   (defaultManagerSettings, newManager)
-import           Servant.Client        (BaseUrl (..), ClientEnv (ClientEnv),
-                                        Scheme (Http))
-import           System.Environment    (getArgs)
+import           Control.Exception        (bracket)
+import           Data.ByteString          (ByteString)
+import           Data.ByteString.Char8    (pack)
+import           Database.MySQL.Base      (Connection, close, connect,
+                                           connectDatabase, connectHost,
+                                           connectPassword, connectUser,
+                                           defaultConnectInfo, query)
+import           Network.HTTP.Client      (defaultManagerSettings, newManager)
+import           Servant.Client           (BaseUrl (..), ClientEnv (ClientEnv),
+                                           Scheme (Http), runClientM)
+import           System.Environment       (getArgs)
 
-import           Test.Tasty            (TestTree, defaultMain, testGroup)
+import           Test.Tasty               (TestTree, defaultMain, testGroup)
 
-import           Types                 (Env (..))
-import           WordPressTests        (wordpressTests)
+import           Types                    (Env (..))
+import           Web.WordPress.API        (listPosts)
+import           Web.WordPress.Types.Post (ListPosts, defaultListPosts)
+import           WordPressTests           (wordpressTests)
 
 main :: IO ()
 main =
@@ -24,6 +26,7 @@ main =
     (ip:user:pass:resetFile:_) -> runWithArgs ip user pass resetFile
     _ -> error "Must provide ip, WP user, WP pass, and DB reset SQL"
 
+-- <3 String
 runWithArgs
   :: String
   -> String
@@ -42,12 +45,17 @@ runWithArgs ip wpUser wpPassword resetSqlFile = do
   resetSql <- readFile resetSqlFile
   mgr <- newManager defaultManagerSettings
   let
-    servantClient = ClientEnv mgr $ BaseUrl Http ip 80 ""
+    servantClient = ClientEnv mgr $ BaseUrl Http ip 80 "/wp-json/wp/v2"
     reset = resetUsing (pack resetSql)
-  bracket
-    (connect dbConnInfo)
-    close
-    (\dbConn -> runWithEnv Env{..})
+    lp = defaultListPosts
+  r <- runClientM (listPosts lp) servantClient
+  case r of
+    Left e -> print e
+    Right (p:_) -> print p
+  -- bracket
+  --   (connect dbConnInfo)
+  --   close
+  --   (\dbConn -> runWithEnv Env{..})
 
 runWithEnv
   :: Env
