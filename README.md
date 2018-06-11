@@ -2,7 +2,7 @@
 
 Test WordPress using hedgehog and nixops.
 
-## Running
+## Running WordPress
 
 ```
 nixops create ./wp.nix ./wp-vbox.nix -d wp
@@ -28,3 +28,10 @@ You should see the IP address of the virtual machine in the deploy output. On my
 
 Now you can hit that IP in a browser and finish the WordPress installation. Once you've finished the installation, go to the plugins section in the admin panel and activate plugins. We need the basic auth plugin to simplify auth while testing.
 
+## Testing
+
+When testing, we drop the WordPress database and reinstate it using a database dump called `wordpress.sql`. To create a `wordpress.sql` after wordpress is running and plugins have been activated, run the following:
+
+```
+nixops ssh -d wp wordpress "mysqldump --databases wordpress" > wordpress.sql
+```
