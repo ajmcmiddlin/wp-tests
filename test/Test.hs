@@ -4,15 +4,19 @@
 import           Control.Exception     (bracket)
 import           Data.ByteString       (ByteString)
 import           Data.ByteString.Char8 (pack)
-import           Database.MySQL.Base   (Connection, connect, connectDatabase, close,
-                                        connectHost, connectPassword,
-                                        connectUser, defaultConnectInfo, query)
+import           Database.MySQL.Base   (Connection, close, connect,
+                                        connectDatabase, connectHost,
+                                        connectPassword, connectUser,
+                                        defaultConnectInfo, query)
 import           Network.HTTP.Client   (defaultManagerSettings, newManager)
 import           Servant.Client        (BaseUrl (..), ClientEnv (ClientEnv),
                                         Scheme (Http))
 import           System.Environment    (getArgs)
 
+import           Test.Tasty            (TestTree, defaultMain, testGroup)
+
 import           Types                 (Env (..))
+import           WordPressTests        (wordpressTests)
 
 main :: IO ()
 main =
@@ -43,13 +47,15 @@ runWithArgs ip wpUser wpPassword resetSqlFile = do
   bracket
     (connect dbConnInfo)
     close
-    (const $ runWithEnv Env{..})
+    (\dbConn -> runWithEnv Env{..})
 
 runWithEnv
   :: Env
   -> IO ()
 runWithEnv env =
-  error "TODO: runWithEnv"
+  defaultMain $ testGroup "wordpress"
+  [ wordpressTests env
+  ]
 
 resetUsing
   :: ByteString

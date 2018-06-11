@@ -26,6 +26,8 @@ library
   default-language:    Haskell2010
 
 test-suite state-tests
+  other-modules:       Types
+                       WordPressTests
   build-depends:       base >=4.10 && <4.11
                      , bytestring >=0.9.1 && <0.11
                      , hedgehog >=0.5 && <0.6
