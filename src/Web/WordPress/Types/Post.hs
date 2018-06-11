@@ -4,11 +4,12 @@
 
 module Web.WordPress.Types.Post where
 
-import           Data.Aeson (FromJSON (..), ToJSON (..), Value (Bool), object,
-                             (.=), (.:), withObject)
-import           Data.Set   (Set)
-import           Data.Text  (Text)
-import           Data.Time  (LocalTime, UTCTime)
+import           Data.Aeson     (FromJSON (..), ToJSON (..), Value (Bool),
+                                 object, withObject, (.:), (.=))
+import           Data.Semigroup ((<>))
+import           Data.Set       (Set)
+import           Data.Text      (Text)
+import           Data.Time      (LocalTime, UTCTime)
 
 data Post =
   Post
@@ -132,6 +133,15 @@ instance ToJSON Status where
     Pending -> "pending"
     Private -> "private"
 
+instance FromJSON Status where
+  parseJSON v = case v of
+    "publish" -> pure Publish
+    "future"  -> pure Future
+    "draft"   -> pure Draft
+    "pending" -> pure Pending
+    "private" -> pure Private
+    _         -> fail $ "Unknown status " <> show v
+
 data CommentStatus =
     CommentsOpen
   | CommentsClosed
@@ -142,6 +152,12 @@ instance ToJSON CommentStatus where
     CommentsOpen -> "open"
     CommentsClosed -> "closed"
 
+instance FromJSON CommentStatus where
+  parseJSON v = case v of
+    "open" -> pure CommentsOpen
+    "closed" -> pure CommentsClosed
+    _ -> fail $ "Unknown comment status " <> show v
+
 data PingStatus =
     PingsOpen
   | PingsClosed
@@ -151,6 +167,12 @@ instance ToJSON PingStatus where
   toJSON = \case
     PingsOpen -> "open"
     PingsClosed -> "closed"
+
+instance FromJSON PingStatus where
+  parseJSON v = case v of
+    "open" -> pure PingsOpen
+    "closed" -> pure PingsClosed
+    _ -> fail $ "Unknown ping status " <> show v
 
 data Format =
     Standard
@@ -164,6 +186,20 @@ data Format =
   | Video
   | Audio
   deriving Show
+
+instance FromJSON Format where
+  parseJSON v = case v of
+    "standard" -> pure Standard
+    "aside" -> pure Aside
+    "chat" -> pure Chat
+    "gallery" -> pure Gallery
+    "link" -> pure Link
+    "image" -> pure Image
+    "quote" -> pure Quote
+    "status" -> pure Status
+    "video" -> pure Video
+    "audio" -> pure Audio
+    _ -> fail $ "Unknown format " <> show v
 
 data Context =
     View
