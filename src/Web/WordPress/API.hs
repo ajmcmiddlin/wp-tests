@@ -1,5 +1,5 @@
-module Web.WordPress.API
+module Web.WordPress.API where
 
-import Servant ((:<|>))
+import Servant.API ((:<|>))
 
-type Posts
+--type Posts =
