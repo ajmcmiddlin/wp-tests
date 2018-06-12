@@ -1,26 +1,78 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 module Web.WordPress.Types.Post where
 
-import           Data.Aeson     (FromJSON (..), ToJSON (..), Value (Bool),
-                                 object, withObject, (.:), (.=))
-import           Data.Semigroup ((<>))
-import           Data.Set       (Set)
-import           Data.Text      (Text)
-import           Data.Time      (LocalTime, UTCTime)
+import           Control.Applicative   (liftA2, liftA3)
+import           Data.Aeson            (FromJSON (..), Object, ToJSON (..),
+                                        Value (Bool), object, withObject, (.:),
+                                        (.:?), (.=))
+import           Data.Aeson.Types      (Parser)
+import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty,
+                                        fromList, insert)
+import           Data.Dependent.Sum    (ShowTag (..), (==>))
+import           Data.Functor.Identity (Identity (Identity))
+import           Data.GADT.Compare     (GEq)
+import           Data.GADT.Compare.TH  (deriveGCompare, deriveGEq)
+import           Data.GADT.Show.TH     (deriveGShow)
+import           Data.Maybe            (maybe)
+import           Data.Semigroup        ((<>))
+import           Data.Set              (Set)
+import           Data.Text             (Text)
+import           Data.Time             (LocalTime, UTCTime)
+import           GHC.Generics          (Generic)
 
 defaultListPosts :: ListPosts
 defaultListPosts =
   ListPosts Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
             Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
 
+data PostKey a where
+  PostDate :: PostKey LocalTime
+  PostDateGmt :: PostKey LocalTime
+  PostGuid :: PostKey Guid
+  PostId :: PostKey Int
+
+deriving instance Show (PostKey a)
+
+instance ShowTag PostKey Identity where
+  showTaggedPrec PostDate    = showsPrec
+  showTaggedPrec PostDateGmt = showsPrec
+  showTaggedPrec PostGuid    = showsPrec
+  showTaggedPrec PostId      = showsPrec
+
+type PostMap = DMap PostKey Identity
+
+addIfPresent
+  :: (Applicative f, GCompare k, FromJSON v)
+  => Object
+  -> Text
+  -> k v
+  -> Parser (DMap k f)
+  -> Parser (DMap k f)
+addIfPresent o name key pDm =
+  maybe id (insert key . pure) <$> (o .:? name) <*> pDm
+
+instance Applicative f => FromJSON (DMap PostKey f) where
+  parseJSON = withObject "Post" $ \o ->
+      addIfPresent o "date" PostDate
+    . addIfPresent o "date_gmt" PostDateGmt
+    . addIfPresent o "guid" PostGuid
+    . addIfPresent o "id" PostId
+    $ pure empty
+
 data Post =
   Post
   { postDate          :: LocalTime
-  , postDateGmt       :: UTCTime
-  , postGuid          :: Text
+  , postDateGmt       :: LocalTime
+  , postGuid          :: Guid
   , postId            :: Int
   , postLink          :: Text
   , postModified      :: LocalTime
@@ -49,30 +101,30 @@ instance FromJSON Post where
   parseJSON =
     withObject "Post" $ \v ->
       Post
-        <$> v .: "postDate"
-        <*> v .: "postDateGmt"
-        <*> v .: "postGuid"
-        <*> v .: "postId"
-        <*> v .: "postLink"
-        <*> v .: "postModified"
-        <*> v .: "postModifiedGmt"
-        <*> v .: "postSlug"
-        <*> v .: "postStatus"
-        <*> v .: "postType"
-        <*> v .: "postPassword"
-        <*> v .: "postTitle"
-        <*> v .: "postContent"
-        <*> v .: "postAuthor"
-        <*> v .: "postExcerpt"
-        <*> v .: "postFeaturedMedia"
-        <*> v .: "postCommentStatus"
-        <*> v .: "postPingStatus"
-        <*> v .: "postFormat"
-        <*> v .: "postMeta"
-        <*> v .: "postSticky"
-        <*> v .: "postTemplate"
-        <*> v .: "postCategories"
-        <*> v .: "postTags"
+        <$> v .: "date"
+        <*> v .: "date_gmt"
+        <*> v .: "guid"
+        <*> v .: "id"
+        <*> v .: "link"
+        <*> v .: "modified"
+        <*> v .: "modifiedGmt"
+        <*> v .: "slug"
+        <*> v .: "status"
+        <*> v .: "type"
+        <*> v .: "password"
+        <*> v .: "title"
+        <*> v .: "content"
+        <*> v .: "author"
+        <*> v .: "excerpt"
+        <*> v .: "featured_media"
+        <*> v .: "comment_status"
+        <*> v .: "ping_status"
+        <*> v .: "format"
+        <*> v .: "meta"
+        <*> v .: "sticky"
+        <*> v .: "template"
+        <*> v .: "categories"
+        <*> v .: "tags"
 
 data ListPosts =
   ListPosts
@@ -249,3 +301,15 @@ instance ToJSON Sticky where
   toJSON = \case
     Sticky -> Bool True
     NotSticky -> Bool False
+
+newtype Guid =
+  Guid { rendered :: Text }
+  deriving (Show)
+
+instance FromJSON Guid where
+  parseJSON = withObject "guid" $ \v ->
+    Guid <$> v .: "rendered"
+
+deriveGEq ''PostKey
+deriveGCompare ''PostKey
+deriveGShow ''PostKey
