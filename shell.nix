@@ -1,11 +1,26 @@
 { nixpkgs ? import <nixpkgs> {}, compiler ? "default" }:
 let
-  inherit (nixpkgs) pkgs;
+  env = import ./env.nix {inherit nixpkgs compiler; };
+  devTools =
+    [ env.pkgs.cabal-install
+      env.haskellPackages.stylish-haskell
+      env.haskellPackages.apply-refact
+      env.haskellPackages.hlint
+      env.haskellPackages.hindent
+      env.haskellPackages.hasktags
+    ];
 
-  haskellPackages = if compiler == "default"
-                       then pkgs.haskellPackages
-                       else pkgs.haskell.packages.${compiler};
-
-  drv = haskellPackages.callPackage ./wp-test.nix {};
+  drv = env.pkgs.haskell.lib.overrideCabal env.drv (drv: {
+    buildDepends =
+      (drv.buildDepends or []) ++
+      devTools ++
+      [ (env.haskellPackages.hoogleLocal {
+          packages =
+            (drv.libraryHaskellDepends or []) ++
+            (drv.executableHaskellDepends or []) ++
+            (drv.testHaskellDepends or []) ;
+        })
+      ];
+  });
 in
-  if pkgs.lib.inNixShell then drv.env else drv
+  if env.pkgs.lib.inNixShell then drv.env else env.drv
