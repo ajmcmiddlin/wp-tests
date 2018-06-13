@@ -43,6 +43,8 @@ import           GHC.Prim              (Proxy#, proxy#)
 import           GHC.TypeLits          (KnownSymbol, Symbol, symbolVal')
 import           Prelude               hiding (lookup)
 
+-- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
+-- together and simplify To/FromJSON instances.
 data PostKey a where
   PostDate          :: PostKey LocalTime
   PostDateGmt       :: PostKey LocalTime

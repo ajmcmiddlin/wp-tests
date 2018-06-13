@@ -10,7 +10,7 @@ import           Database.MySQL.Base      (Connection, close, connect,
                                            connectPassword, connectUser,
                                            defaultConnectInfo, query)
 import           Network.HTTP.Client      (defaultManagerSettings, newManager)
-import           Servant.Client           (BaseUrl (..), ClientEnv (ClientEnv),
+import           Servant.Client           (BaseUrl (..), ClientEnv (ClientEnv), ServantError,
                                            Scheme (Http), runClientM)
 import           System.Environment       (getArgs)
 
@@ -18,13 +18,17 @@ import           Test.Tasty               (TestTree, defaultMain, testGroup)
 
 import           Types                    (Env (..))
 import           Web.WordPress.API        (listPosts)
--- import           Web.WordPress.Types.Post (ListPosts)
+import           Web.WordPress.Types.Post (PostMap)
 import           WordPressTests           (wordpressTests)
 
 main :: IO ()
 main =
   getArgs >>= \case
-    (ip:user:pass:resetFile:_) -> runWithArgs ip user pass resetFile
+    (ip:user:pass:resetFile:_) -> do
+      r <- runWithArgs ip user pass resetFile
+      case r of
+        Left e -> print e
+        Right (p:_) -> print p
     _ -> error "Must provide ip, WP user, WP pass, and DB reset SQL"
 
 -- <3 String
@@ -33,7 +37,7 @@ runWithArgs
   -> String
   -> String
   -> String
-  -> IO ()
+  -> IO (Either ServantError [PostMap])
 runWithArgs ip wpUser wpPassword resetSqlFile = do
   let
     dbConnInfo =
@@ -49,10 +53,7 @@ runWithArgs ip wpUser wpPassword resetSqlFile = do
     servantClient = ClientEnv mgr $ BaseUrl Http ip 80 "/wp-json/wp/v2"
     reset = resetUsing (pack resetSql)
     lp = DM.empty
-  r <- runClientM (listPosts lp) servantClient
-  case r of
-    Left e -> print e
-    Right (p:_) -> print p
+  runClientM (listPosts lp) servantClient
   -- bracket
   --   (connect dbConnInfo)
   --   close
