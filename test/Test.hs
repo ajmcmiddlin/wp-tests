@@ -4,6 +4,7 @@
 import           Control.Exception        (bracket)
 import           Data.ByteString          (ByteString)
 import           Data.ByteString.Char8    (pack)
+import qualified Data.Dependent.Map as DM
 import           Database.MySQL.Base      (Connection, close, connect,
                                            connectDatabase, connectHost,
                                            connectPassword, connectUser,
@@ -17,7 +18,7 @@ import           Test.Tasty               (TestTree, defaultMain, testGroup)
 
 import           Types                    (Env (..))
 import           Web.WordPress.API        (listPosts)
-import           Web.WordPress.Types.Post (ListPosts, defaultListPosts)
+-- import           Web.WordPress.Types.Post (ListPosts)
 import           WordPressTests           (wordpressTests)
 
 main :: IO ()
@@ -47,7 +48,7 @@ runWithArgs ip wpUser wpPassword resetSqlFile = do
   let
     servantClient = ClientEnv mgr $ BaseUrl Http ip 80 "/wp-json/wp/v2"
     reset = resetUsing (pack resetSql)
-    lp = defaultListPosts
+    lp = DM.empty
   r <- runClientM (listPosts lp) servantClient
   case r of
     Left e -> print e
