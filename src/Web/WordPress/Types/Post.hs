@@ -1,20 +1,24 @@
-{-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MagicHash             #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs               #-}
+{-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MagicHash                  #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PolyKinds                  #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Web.WordPress.Types.Post where
 
@@ -23,12 +27,14 @@ import           Data.Aeson            (FromJSON (..), Object, ToJSON (..),
                                         Value (Bool, Object), object,
                                         withObject, (.:), (.:?), (.=))
 import           Data.Aeson.Types      (Pair, Parser)
-import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty,
+import qualified Data.Bimap            as BM
+import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty, toList,
                                         foldrWithKey, fromList, insert, lookup)
 import           Data.Dependent.Sum    (ShowTag (..), (==>))
 import           Data.Functor.Const    (Const (..))
 import           Data.Functor.Identity (Identity (Identity))
-import           Data.GADT.Compare     (GEq)
+import           Data.GADT.Compare     ((:~:) (Refl), GCompare (..), GEq (..),
+                                        GOrdering (..))
 import           Data.GADT.Compare.TH  (deriveGCompare, deriveGEq)
 import           Data.GADT.Show.TH     (deriveGShow)
 import qualified Data.HashMap.Strict   as HM
@@ -36,12 +42,133 @@ import           Data.Maybe            (maybe)
 import           Data.Proxy            (Proxy (..))
 import           Data.Semigroup        ((<>))
 import           Data.Set              (Set)
-import           Data.Text             (Text)
+import           Data.Some             (Some (This))
+import           Data.Text             (Text, pack)
 import           Data.Time             (LocalTime, UTCTime)
 import           GHC.Generics          (Generic)
 import           GHC.Prim              (Proxy#, proxy#)
 import           GHC.TypeLits          (KnownSymbol, Symbol, symbolVal')
 import           Prelude               hiding (lookup)
+
+class FromJSONKey k f where
+  parseJSONKey :: forall a. FromJSON (f a) => k a -> Value -> Parser (f a)
+
+instance FromJSONKey PostKey f where
+  parseJSONKey _ = parseJSON
+
+class ToJSONKey k f where
+  toJSONKey :: k a -> f a -> Value
+
+class GFromKey k where
+  fromKey :: k a -> Text
+
+class GToKey k where
+  toKey   :: Text -> Maybe (Some k)
+
+data FooKey (s :: Symbol) a where
+  I :: FooKey "i" Int
+
+instance KnownSymbol s => GFromKey (FooKey s) where
+  fromKey (ka :: FooKey s a) = pack (symName @s)
+
+instance GToKey (FooKey s) where
+  toKey = undefined
+
+instance GEq (FooKey s) where
+  geq I I = Just Refl
+  geq _ _ = Nothing
+
+instance GCompare (FooKey s) where
+  gcompare I I = GEQ
+
+instance FromJSONKey (FooKey s) f where
+  -- parseJSONKey :: forall k a. FromJSON a => Value -> Parser a
+  parseJSONKey _ = parseJSON
+
+instance ToJSONKey (FooKey s) Identity where
+  toJSONKey I = toJSON
+
+data L (key :: Symbol -> * -> *) a where
+  L :: KnownSymbol s => k s a -> L k a
+
+instance GFromKey (L FooKey) where
+  fromKey (L ksa) = fromKey ksa
+
+
+instance GToKey (L FooKey) where
+  toKey t = fmap (\case (This (fk :: KnownSymbol s => FooKey s a)) -> This (L fk)) $ toKey t
+
+instance GEq (L FooKey) where
+  geq (L I) (L I) = Just Refl
+  geq _ _         = Nothing
+
+instance GCompare (L FooKey) where
+  gcompare (L I) (L I) = GEQ
+
+data BarKey a where
+  S :: BarKey Int
+
+instance (GFromKey k, ToJSONKey k f) => ToJSON (DMap k f) where
+  toJSON dm =
+    let
+      toPair (k :=> v) = (fromKey k, toJSONKey k v)
+    in
+      object . fmap toPair . toList $ dm
+
+instance GFromKey PostKey where
+  fromKey = \case
+    PostDate -> "date"
+    PostDateGmt -> "date_gmt"
+    PostGuid -> "guid"
+    PostId -> "id"
+    PostLink -> "link"
+    PostModified -> "modified"
+    PostModifiedGmt -> "modifiedGmt"
+    PostSlug -> "slug"
+    PostStatus -> "status"
+    PostType -> "type"
+    PostPassword -> "password"
+    PostTitle -> "title"
+    PostContent -> "content"
+    PostAuthor -> "author"
+    PostExcerpt -> "excerpt"
+    PostFeaturedMedia -> "featured_media"
+    PostCommentStatus -> "comment_status"
+    PostPingStatus -> "ping_status"
+    PostFormat -> "format"
+    PostMeta -> "meta"
+    PostSticky -> "sticky"
+    PostTemplate -> "template"
+    PostCategories -> "categories"
+    PostTags -> "tags"
+
+instance GToKey PostKey where
+  toKey = \case
+    "date" -> Just (This PostDate)
+    "date_gmt" -> Just (This PostDateGmt)
+    "guid" -> Just (This PostGuid)
+    "id" -> Just (This PostId)
+    "link" -> Just (This PostLink)
+    "modified" -> Just (This PostModified)
+    "modifiedGmt" -> Just (This PostModifiedGmt)
+    "slug" -> Just (This PostSlug)
+    "status" -> Just (This PostStatus)
+    "type" -> Just (This PostType)
+    "password" -> Just (This PostPassword)
+    "title" -> Just (This PostTitle)
+    "content" -> Just (This PostContent)
+    "author" -> Just (This PostAuthor)
+    "excerpt" -> Just (This PostExcerpt)
+    "featured_media" -> Just (This PostFeaturedMedia)
+    "comment_status" -> Just (This PostCommentStatus)
+    "ping_status" -> Just (This PostPingStatus)
+    "format" -> Just (This PostFormat)
+    "meta" -> Just (This PostMeta)
+    "sticky" -> Just (This PostSticky)
+    "template" -> Just (This PostTemplate)
+    "categories" -> Just (This PostCategories)
+    "tags" -> Just (This PostTags)
+    _ -> Nothing
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
@@ -72,6 +199,8 @@ data PostKey a where
   PostTags          :: PostKey [Int]
 
 deriving instance Show (PostKey a)
+deriving instance Eq (PostKey a)
+deriving instance Ord (PostKey a)
 
 instance ShowTag PostKey Identity where
   showTaggedPrec PostDate          = showsPrec
@@ -132,7 +261,7 @@ postJsonKeys =
   ]
 
 addToMapIfPresent
-  :: (Applicative f, GCompare k, FromJSON v)
+  :: (Applicative f, FromJSON v, GCompare k)
   => Object
   -> Text
   -> k v
