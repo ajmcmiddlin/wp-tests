@@ -27,7 +27,6 @@ import           Data.Aeson            (FromJSON (..), Object, ToJSON (..),
                                         Value (Bool, Object), object,
                                         withObject, (.:), (.:?), (.=))
 import           Data.Aeson.Types      (Pair, Parser)
-import qualified Data.Bimap            as BM
 import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty, toList,
                                         foldrWithKey, fromList, insert, lookup)
 import           Data.Dependent.Sum    (ShowTag (..), (==>))
@@ -50,125 +49,8 @@ import           GHC.Prim              (Proxy#, proxy#)
 import           GHC.TypeLits          (KnownSymbol, Symbol, symbolVal')
 import           Prelude               hiding (lookup)
 
-class FromJSONKey k f where
-  parseJSONKey :: forall a. FromJSON (f a) => k a -> Value -> Parser (f a)
+import Data.GADT.Aeson (GKey (..), symName, FromJSONKey (..), ToJSONKey (..))
 
-instance FromJSONKey PostKey f where
-  parseJSONKey _ = parseJSON
-
-class ToJSONKey k f where
-  toJSONKey :: k a -> f a -> Value
-
-class GFromKey k where
-  fromKey :: k a -> Text
-
-class GToKey k where
-  toKey   :: Text -> Maybe (Some k)
-
-data FooKey (s :: Symbol) a where
-  I :: FooKey "i" Int
-
-instance KnownSymbol s => GFromKey (FooKey s) where
-  fromKey (ka :: FooKey s a) = pack (symName @s)
-
-instance GToKey (FooKey s) where
-  toKey = undefined
-
-instance GEq (FooKey s) where
-  geq I I = Just Refl
-  geq _ _ = Nothing
-
-instance GCompare (FooKey s) where
-  gcompare I I = GEQ
-
-instance FromJSONKey (FooKey s) f where
-  -- parseJSONKey :: forall k a. FromJSON a => Value -> Parser a
-  parseJSONKey _ = parseJSON
-
-instance ToJSONKey (FooKey s) Identity where
-  toJSONKey I = toJSON
-
-data L (key :: Symbol -> * -> *) a where
-  L :: KnownSymbol s => k s a -> L k a
-
-instance GFromKey (L FooKey) where
-  fromKey (L ksa) = fromKey ksa
-
-
-instance GToKey (L FooKey) where
-  toKey t = fmap (\case (This (fk :: KnownSymbol s => FooKey s a)) -> This (L fk)) $ toKey t
-
-instance GEq (L FooKey) where
-  geq (L I) (L I) = Just Refl
-  geq _ _         = Nothing
-
-instance GCompare (L FooKey) where
-  gcompare (L I) (L I) = GEQ
-
-data BarKey a where
-  S :: BarKey Int
-
-instance (GFromKey k, ToJSONKey k f) => ToJSON (DMap k f) where
-  toJSON dm =
-    let
-      toPair (k :=> v) = (fromKey k, toJSONKey k v)
-    in
-      object . fmap toPair . toList $ dm
-
-instance GFromKey PostKey where
-  fromKey = \case
-    PostDate -> "date"
-    PostDateGmt -> "date_gmt"
-    PostGuid -> "guid"
-    PostId -> "id"
-    PostLink -> "link"
-    PostModified -> "modified"
-    PostModifiedGmt -> "modifiedGmt"
-    PostSlug -> "slug"
-    PostStatus -> "status"
-    PostType -> "type"
-    PostPassword -> "password"
-    PostTitle -> "title"
-    PostContent -> "content"
-    PostAuthor -> "author"
-    PostExcerpt -> "excerpt"
-    PostFeaturedMedia -> "featured_media"
-    PostCommentStatus -> "comment_status"
-    PostPingStatus -> "ping_status"
-    PostFormat -> "format"
-    PostMeta -> "meta"
-    PostSticky -> "sticky"
-    PostTemplate -> "template"
-    PostCategories -> "categories"
-    PostTags -> "tags"
-
-instance GToKey PostKey where
-  toKey = \case
-    "date" -> Just (This PostDate)
-    "date_gmt" -> Just (This PostDateGmt)
-    "guid" -> Just (This PostGuid)
-    "id" -> Just (This PostId)
-    "link" -> Just (This PostLink)
-    "modified" -> Just (This PostModified)
-    "modifiedGmt" -> Just (This PostModifiedGmt)
-    "slug" -> Just (This PostSlug)
-    "status" -> Just (This PostStatus)
-    "type" -> Just (This PostType)
-    "password" -> Just (This PostPassword)
-    "title" -> Just (This PostTitle)
-    "content" -> Just (This PostContent)
-    "author" -> Just (This PostAuthor)
-    "excerpt" -> Just (This PostExcerpt)
-    "featured_media" -> Just (This PostFeaturedMedia)
-    "comment_status" -> Just (This PostCommentStatus)
-    "ping_status" -> Just (This PostPingStatus)
-    "format" -> Just (This PostFormat)
-    "meta" -> Just (This PostMeta)
-    "sticky" -> Just (This PostSticky)
-    "template" -> Just (This PostTemplate)
-    "categories" -> Just (This PostCategories)
-    "tags" -> Just (This PostTags)
-    _ -> Nothing
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
@@ -202,6 +84,9 @@ deriving instance Show (PostKey a)
 deriving instance Eq (PostKey a)
 deriving instance Ord (PostKey a)
 
+instance FromJSONKey PostKey f where
+  parseJSONKey _ = parseJSON
+
 instance ShowTag PostKey Identity where
   showTaggedPrec PostDate          = showsPrec
   showTaggedPrec PostDateGmt       = showsPrec
@@ -228,37 +113,62 @@ instance ShowTag PostKey Identity where
   showTaggedPrec PostCategories    = showsPrec
   showTaggedPrec PostTags          = showsPrec
 
-type PostMap = DMap PostKey Identity
+instance GKey PostKey where
+  toFieldName = \case
+    PostDate -> "date"
+    PostDateGmt -> "date_gmt"
+    PostGuid -> "guid"
+    PostId -> "id"
+    PostLink -> "link"
+    PostModified -> "modified"
+    PostModifiedGmt -> "modifiedGmt"
+    PostSlug -> "slug"
+    PostStatus -> "status"
+    PostType -> "type"
+    PostPassword -> "password"
+    PostTitle -> "title"
+    PostContent -> "content"
+    PostAuthor -> "author"
+    PostExcerpt -> "excerpt"
+    PostFeaturedMedia -> "featured_media"
+    PostCommentStatus -> "comment_status"
+    PostPingStatus -> "ping_status"
+    PostFormat -> "format"
+    PostMeta -> "meta"
+    PostSticky -> "sticky"
+    PostTemplate -> "template"
+    PostCategories -> "categories"
+    PostTags -> "tags"
 
-postJsonKeys
-  :: DMap PostKey (Const Text)
-postJsonKeys =
-  fromList [
-    PostDate :=> "date"
-  , PostDateGmt :=> "date_gmt"
-  , PostGuid :=> "guid"
-  , PostId :=> "id"
-  , PostLink :=> "link"
-  , PostModified :=> "modified"
-  , PostModifiedGmt :=> "modifiedGmt"
-  , PostSlug :=> "slug"
-  , PostStatus :=> "status"
-  , PostType :=> "type"
-  , PostPassword :=> "password"
-  , PostTitle :=> "title"
-  , PostContent :=> "content"
-  , PostAuthor :=> "author"
-  , PostExcerpt :=> "excerpt"
-  , PostFeaturedMedia :=> "featured_media"
-  , PostCommentStatus :=> "comment_status"
-  , PostPingStatus :=> "ping_status"
-  , PostFormat :=> "format"
-  , PostMeta :=> "meta"
-  , PostSticky :=> "sticky"
-  , PostTemplate :=> "template"
-  , PostCategories :=> "categories"
-  , PostTags :=> "tags"
-  ]
+  keys = [
+      This PostDate
+    , This PostDateGmt
+    , This PostGuid
+    , This PostId
+    , This PostLink
+    , This PostModified
+    , This PostModifiedGmt
+    , This PostSlug
+    , This PostStatus
+    , This PostType
+    , This PostPassword
+    , This PostTitle
+    , This PostContent
+    , This PostAuthor
+    , This PostExcerpt
+    , This PostFeaturedMedia
+    , This PostCommentStatus
+    , This PostPingStatus
+    , This PostFormat
+    , This PostMeta
+    , This PostSticky
+    , This PostTemplate
+    , This PostCategories
+    , This PostTags
+    ]
+
+
+type PostMap = DMap PostKey Identity
 
 addToMapIfPresent
   :: (Applicative f, FromJSON v, GCompare k)
@@ -322,6 +232,28 @@ data ListPostsKey a where
   ListPostsTags              :: ListPostsKey (Set Text)
   ListPostsTagsExclude       :: ListPostsKey (Set Text)
   ListPostsSticky            :: ListPostsKey Sticky
+
+instance GToFieldName ListPostsKey where
+  toFieldName = \case
+    ListPostsContext -> "context"
+    ListPostsPage -> "page"
+    ListPostsPerPage -> "per_page"
+    ListPostsSearch -> "search"
+    ListPostsAfter -> "after"
+    ListPostsAuthor -> "author"
+    ListPostsAuthorExclude -> "author_exclude"
+    ListPostsBefore -> "before"
+    ListPostsExclude -> "exclude"
+    ListPostsInclude -> "include"
+    ListPostsOffset -> "offset"
+    ListPostsOrder -> "order"
+    ListPostsSlug -> "slug"
+    ListPostsStatus -> "status"
+    ListPostsCategories -> "categories"
+    ListPostsCategoriesExclude -> "categories_exclude"
+    ListPostsTags -> "tags"
+    ListPostsTagsExclude -> "tags_exclude"
+    ListPostsSticky -> "sticky"
 
 addToObjectIfPresent
   :: ( ToJSON v
@@ -513,11 +445,6 @@ instance KnownSymbol name => FromJSON (RP name) where
   parseJSON =
     withObject (symName @name) $ \v ->
       RP <$> v .: "rendered" <*> v .: "protected"
-
-symName
-  :: forall name. KnownSymbol name => String
-symName =
-  symbolVal' (proxy# :: (Proxy# name))
 
 deriveGEq ''PostKey
 deriveGCompare ''PostKey
