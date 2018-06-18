@@ -86,11 +86,11 @@ CREATE TABLE `wp_comments` (
 -- Dumping data for table `wp_comments`
 --
 
-LOCK TABLES `wp_comments` WRITE;
-/*!40000 ALTER TABLE `wp_comments` DISABLE KEYS */;
-INSERT INTO `wp_comments` VALUES (1,1,'A WordPress Commenter','wapuu@wordpress.example','https://wordpress.org/','','2018-06-11 03:50:09','2018-06-11 03:50:09','Hi, this is a comment.\nTo get started with moderating, editing, and deleting comments, please visit the Comments screen in the dashboard.\nCommenter avatars come from <a href=\"https://gravatar.com\">Gravatar</a>.',0,'1','','',0,0);
-/*!40000 ALTER TABLE `wp_comments` ENABLE KEYS */;
-UNLOCK TABLES;
+-- LOCK TABLES `wp_comments` WRITE;
+-- /*!40000 ALTER TABLE `wp_comments` DISABLE KEYS */;
+-- INSERT INTO `wp_comments` VALUES (1,1,'A WordPress Commenter','wapuu@wordpress.example','https://wordpress.org/','','2018-06-11 03:50:09','2018-06-11 03:50:09','Hi, this is a comment.\nTo get started with moderating, editing, and deleting comments, please visit the Comments screen in the dashboard.\nCommenter avatars come from <a href=\"https://gravatar.com\">Gravatar</a>.',0,'1','','',0,0);
+-- /*!40000 ALTER TABLE `wp_comments` ENABLE KEYS */;
+-- UNLOCK TABLES;
 
 --
 -- Table structure for table `wp_links`
@@ -176,11 +176,11 @@ CREATE TABLE `wp_postmeta` (
 -- Dumping data for table `wp_postmeta`
 --
 
-LOCK TABLES `wp_postmeta` WRITE;
-/*!40000 ALTER TABLE `wp_postmeta` DISABLE KEYS */;
-INSERT INTO `wp_postmeta` VALUES (1,2,'_wp_page_template','default');
-/*!40000 ALTER TABLE `wp_postmeta` ENABLE KEYS */;
-UNLOCK TABLES;
+-- LOCK TABLES `wp_postmeta` WRITE;
+-- /*!40000 ALTER TABLE `wp_postmeta` DISABLE KEYS */;
+-- INSERT INTO `wp_postmeta` VALUES (1,2,'_wp_page_template','default');
+-- /*!40000 ALTER TABLE `wp_postmeta` ENABLE KEYS */;
+-- UNLOCK TABLES;
 
 --
 -- Table structure for table `wp_posts`
@@ -225,11 +225,11 @@ CREATE TABLE `wp_posts` (
 -- Dumping data for table `wp_posts`
 --
 
-LOCK TABLES `wp_posts` WRITE;
-/*!40000 ALTER TABLE `wp_posts` DISABLE KEYS */;
-INSERT INTO `wp_posts` VALUES (1,1,'2018-06-11 03:50:09','2018-06-11 03:50:09','Welcome to WordPress. This is your first post. Edit or delete it, then start writing!','Hello world!','','publish','open','open','','hello-world','','','2018-06-11 03:50:09','2018-06-11 03:50:09','',0,'http://192.168.56.101/?p=1',0,'post','',1),(2,1,'2018-06-11 03:50:09','2018-06-11 03:50:09','This is an example page. It\'s different from a blog post because it will stay in one place and will show up in your site navigation (in most themes). Most people start with an About page that introduces them to potential site visitors. It might say something like this:\n\n<blockquote>Hi there! I\'m a bike messenger by day, aspiring actor by night, and this is my website. I live in Los Angeles, have a great dog named Jack, and I like pi&#241;a coladas. (And gettin\' caught in the rain.)</blockquote>\n\n...or something like this:\n\n<blockquote>The XYZ Doohickey Company was founded in 1971, and has been providing quality doohickeys to the public ever since. Located in Gotham City, XYZ employs over 2,000 people and does all kinds of awesome things for the Gotham community.</blockquote>\n\nAs a new WordPress user, you should go to <a href=\"http://192.168.56.101/wp-admin/\">your dashboard</a> to delete this page and create new pages for your content. Have fun!','Sample Page','','publish','closed','open','','sample-page','','','2018-06-11 03:50:09','2018-06-11 03:50:09','',0,'http://192.168.56.101/?page_id=2',0,'page','',0),(3,1,'2018-06-11 03:50:23','0000-00-00 00:00:00','','Auto Draft','','auto-draft','open','open','','','','','2018-06-11 03:50:23','0000-00-00 00:00:00','',0,'http://192.168.56.101/?p=3',0,'post','',0);
-/*!40000 ALTER TABLE `wp_posts` ENABLE KEYS */;
-UNLOCK TABLES;
+-- LOCK TABLES `wp_posts` WRITE;
+-- /*!40000 ALTER TABLE `wp_posts` DISABLE KEYS */;
+-- INSERT INTO `wp_posts` VALUES (1,1,'2018-06-11 03:50:09','2018-06-11 03:50:09','Welcome to WordPress. This is your first post. Edit or delete it, then start writing!','Hello world!','','publish','open','open','','hello-world','','','2018-06-11 03:50:09','2018-06-11 03:50:09','',0,'http://192.168.56.101/?p=1',0,'post','',1),(2,1,'2018-06-11 03:50:09','2018-06-11 03:50:09','This is an example page. It\'s different from a blog post because it will stay in one place and will show up in your site navigation (in most themes). Most people start with an About page that introduces them to potential site visitors. It might say something like this:\n\n<blockquote>Hi there! I\'m a bike messenger by day, aspiring actor by night, and this is my website. I live in Los Angeles, have a great dog named Jack, and I like pi&#241;a coladas. (And gettin\' caught in the rain.)</blockquote>\n\n...or something like this:\n\n<blockquote>The XYZ Doohickey Company was founded in 1971, and has been providing quality doohickeys to the public ever since. Located in Gotham City, XYZ employs over 2,000 people and does all kinds of awesome things for the Gotham community.</blockquote>\n\nAs a new WordPress user, you should go to <a href=\"http://192.168.56.101/wp-admin/\">your dashboard</a> to delete this page and create new pages for your content. Have fun!','Sample Page','','publish','closed','open','','sample-page','','','2018-06-11 03:50:09','2018-06-11 03:50:09','',0,'http://192.168.56.101/?page_id=2',0,'page','',0),(3,1,'2018-06-11 03:50:23','0000-00-00 00:00:00','','Auto Draft','','auto-draft','open','open','','','','','2018-06-11 03:50:23','0000-00-00 00:00:00','',0,'http://192.168.56.101/?p=3',0,'post','',0);
+-- /*!40000 ALTER TABLE `wp_posts` ENABLE KEYS */;
+-- UNLOCK TABLES;
 
 --
 -- Table structure for table `wp_term_relationships`
@@ -251,11 +251,11 @@ CREATE TABLE `wp_term_relationships` (
 -- Dumping data for table `wp_term_relationships`
 --
 
-LOCK TABLES `wp_term_relationships` WRITE;
-/*!40000 ALTER TABLE `wp_term_relationships` DISABLE KEYS */;
-INSERT INTO `wp_term_relationships` VALUES (1,1,0);
-/*!40000 ALTER TABLE `wp_term_relationships` ENABLE KEYS */;
-UNLOCK TABLES;
+-- LOCK TABLES `wp_term_relationships` WRITE;
+-- /*!40000 ALTER TABLE `wp_term_relationships` DISABLE KEYS */;
+-- INSERT INTO `wp_term_relationships` VALUES (1,1,0);
+-- /*!40000 ALTER TABLE `wp_term_relationships` ENABLE KEYS */;
+-- UNLOCK TABLES;
 
 --
 -- Table structure for table `wp_term_taxonomy`
