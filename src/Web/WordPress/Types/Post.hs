@@ -26,10 +26,13 @@ import           Control.Applicative   (liftA2, liftA3)
 import           Data.Aeson            (FromJSON (..), Object, ToJSON (..),
                                         Value (Bool, Object), object,
                                         withObject, (.:), (.:?), (.=))
-import           Data.Aeson.Types      (Pair, Parser)
-import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty, toList,
-                                        foldrWithKey, fromList, insert, lookup)
-import           Data.Dependent.Sum    (ShowTag (..), (==>))
+import           Data.Aeson.Types      (FromJSON1, Pair, Parser, ToJSON1,
+                                        parseJSON1, toJSON1)
+import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty,
+                                        foldrWithKey, fromList, insert, lookup,
+                                        toList)
+import           Data.Dependent.Sum    (EqTag (..), ShowTag (..), (==>))
+import           Data.Functor.Classes  (Eq1, Show1, showsPrec1, eq1)
 import           Data.Functor.Const    (Const (..))
 import           Data.Functor.Identity (Identity (Identity))
 import           Data.GADT.Compare     ((:~:) (Refl), GCompare (..), GEq (..),
@@ -49,14 +52,14 @@ import           GHC.Prim              (Proxy#, proxy#)
 import           GHC.TypeLits          (KnownSymbol, Symbol, symbolVal')
 import           Prelude               hiding (lookup)
 
-import Data.GADT.Aeson (GKey (..), symName, FromJSONKey (..), ToJSONKey (..))
-
+import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
+                                        ToJSONViaKey (..), mkParseJSON, symName)
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
 data PostKey a where
   PostDate          :: PostKey LocalTime
-  PostDateGmt       :: PostKey LocalTime
+  PostDateGmt       :: PostKey UTCTime
   PostGuid          :: PostKey (Rendered "guid")
   PostId            :: PostKey Int
   PostLink          :: PostKey Text
@@ -84,35 +87,64 @@ deriving instance Show (PostKey a)
 deriving instance Eq (PostKey a)
 deriving instance Ord (PostKey a)
 
-instance FromJSONKey PostKey f where
-  parseJSONKey _ = parseJSON
+-- TODO: use TH to get rid of this
+instance FromJSON1 f => FromJSONViaKey PostKey f where
+  parseJSONViaKey PostDate          = parseJSON1
+  parseJSONViaKey PostDateGmt       = parseJSON1
+  parseJSONViaKey PostGuid          = parseJSON1
+  parseJSONViaKey PostId            = parseJSON1
+  parseJSONViaKey PostLink          = parseJSON1
+  parseJSONViaKey PostModified      = parseJSON1
+  parseJSONViaKey PostModifiedGmt   = parseJSON1
+  parseJSONViaKey PostSlug          = parseJSON1
+  parseJSONViaKey PostStatus        = parseJSON1
+  parseJSONViaKey PostType          = parseJSON1
+  parseJSONViaKey PostPassword      = parseJSON1
+  parseJSONViaKey PostTitle         = parseJSON1
+  parseJSONViaKey PostContent       = parseJSON1
+  parseJSONViaKey PostAuthor        = parseJSON1
+  parseJSONViaKey PostExcerpt       = parseJSON1
+  parseJSONViaKey PostFeaturedMedia = parseJSON1
+  parseJSONViaKey PostCommentStatus = parseJSON1
+  parseJSONViaKey PostPingStatus    = parseJSON1
+  parseJSONViaKey PostFormat        = parseJSON1
+  parseJSONViaKey PostMeta          = parseJSON1
+  parseJSONViaKey PostSticky        = parseJSON1
+  parseJSONViaKey PostTemplate      = parseJSON1
+  parseJSONViaKey PostCategories    = parseJSON1
+  parseJSONViaKey PostTags          = parseJSON1
 
-instance ShowTag PostKey Identity where
-  showTaggedPrec PostDate          = showsPrec
-  showTaggedPrec PostDateGmt       = showsPrec
-  showTaggedPrec PostGuid          = showsPrec
-  showTaggedPrec PostId            = showsPrec
-  showTaggedPrec PostLink          = showsPrec
-  showTaggedPrec PostModified      = showsPrec
-  showTaggedPrec PostModifiedGmt   = showsPrec
-  showTaggedPrec PostSlug          = showsPrec
-  showTaggedPrec PostStatus        = showsPrec
-  showTaggedPrec PostType          = showsPrec
-  showTaggedPrec PostPassword      = showsPrec
-  showTaggedPrec PostTitle         = showsPrec
-  showTaggedPrec PostContent       = showsPrec
-  showTaggedPrec PostAuthor        = showsPrec
-  showTaggedPrec PostExcerpt       = showsPrec
-  showTaggedPrec PostFeaturedMedia = showsPrec
-  showTaggedPrec PostCommentStatus = showsPrec
-  showTaggedPrec PostPingStatus    = showsPrec
-  showTaggedPrec PostFormat        = showsPrec
-  showTaggedPrec PostMeta          = showsPrec
-  showTaggedPrec PostSticky        = showsPrec
-  showTaggedPrec PostTemplate      = showsPrec
-  showTaggedPrec PostCategories    = showsPrec
-  showTaggedPrec PostTags          = showsPrec
+instance (Applicative f, FromJSON1 f) => FromJSON (DMap PostKey f) where
+  parseJSON = mkParseJSON "Post"
 
+-- TODO: use TH to get rid of this
+instance Show1 f => ShowTag PostKey f where
+  showTaggedPrec PostDate          = showsPrec1
+  showTaggedPrec PostDateGmt       = showsPrec1
+  showTaggedPrec PostGuid          = showsPrec1
+  showTaggedPrec PostId            = showsPrec1
+  showTaggedPrec PostLink          = showsPrec1
+  showTaggedPrec PostModified      = showsPrec1
+  showTaggedPrec PostModifiedGmt   = showsPrec1
+  showTaggedPrec PostSlug          = showsPrec1
+  showTaggedPrec PostStatus        = showsPrec1
+  showTaggedPrec PostType          = showsPrec1
+  showTaggedPrec PostPassword      = showsPrec1
+  showTaggedPrec PostTitle         = showsPrec1
+  showTaggedPrec PostContent       = showsPrec1
+  showTaggedPrec PostAuthor        = showsPrec1
+  showTaggedPrec PostExcerpt       = showsPrec1
+  showTaggedPrec PostFeaturedMedia = showsPrec1
+  showTaggedPrec PostCommentStatus = showsPrec1
+  showTaggedPrec PostPingStatus    = showsPrec1
+  showTaggedPrec PostFormat        = showsPrec1
+  showTaggedPrec PostMeta          = showsPrec1
+  showTaggedPrec PostSticky        = showsPrec1
+  showTaggedPrec PostTemplate      = showsPrec1
+  showTaggedPrec PostCategories    = showsPrec1
+  showTaggedPrec PostTags          = showsPrec1
+
+-- TODO: use TH and Symbol to get rid of this
 instance GKey PostKey where
   toFieldName = \case
     PostDate -> "date"
@@ -167,48 +199,7 @@ instance GKey PostKey where
     , This PostTags
     ]
 
-
 type PostMap = DMap PostKey Identity
-
-addToMapIfPresent
-  :: (Applicative f, FromJSON v, GCompare k)
-  => Object
-  -> Text
-  -> k v
-  -> Parser (DMap k f)
-  -> Parser (DMap k f)
-addToMapIfPresent o name key pDm =
-  maybe id (insert key . pure) <$> (o .:? name) <*> pDm
-
-instance Applicative f => FromJSON (DMap PostKey f) where
-  parseJSON = withObject "Post" $ \o ->
-    let add = addToMapIfPresent o
-    in
-      add "date" PostDate
-    . addToMapIfPresent o "date_gmt" PostDateGmt
-    . addToMapIfPresent o "guid" PostGuid
-    . addToMapIfPresent o "id" PostId
-    . addToMapIfPresent o "link" PostLink
-    . addToMapIfPresent o "modified" PostModified
-    . addToMapIfPresent o "modifiedGmt" PostModifiedGmt
-    . addToMapIfPresent o "slug" PostSlug
-    . addToMapIfPresent o "status" PostStatus
-    . addToMapIfPresent o "type" PostType
-    . addToMapIfPresent o "password" PostPassword
-    . addToMapIfPresent o "title" PostTitle
-    . addToMapIfPresent o "content" PostContent
-    . addToMapIfPresent o "author" PostAuthor
-    . addToMapIfPresent o "excerpt" PostExcerpt
-    . addToMapIfPresent o "featured_media" PostFeaturedMedia
-    . addToMapIfPresent o "comment_status" PostCommentStatus
-    . addToMapIfPresent o "ping_status" PostPingStatus
-    . addToMapIfPresent o "format" PostFormat
-    . addToMapIfPresent o "meta" PostMeta
-    . addToMapIfPresent o "sticky" PostSticky
-    . addToMapIfPresent o "template" PostTemplate
-    . addToMapIfPresent o "categories" PostCategories
-    . addToMapIfPresent o "tags" PostTags
-    $ pure empty
 
 type ListPostsMap = DMap ListPostsKey Identity
 
@@ -233,7 +224,9 @@ data ListPostsKey a where
   ListPostsTagsExclude       :: ListPostsKey (Set Text)
   ListPostsSticky            :: ListPostsKey Sticky
 
-instance GToFieldName ListPostsKey where
+deriving instance Eq (ListPostsKey a)
+
+instance GKey ListPostsKey where
   toFieldName = \case
     ListPostsContext -> "context"
     ListPostsPage -> "page"
@@ -255,47 +248,72 @@ instance GToFieldName ListPostsKey where
     ListPostsTagsExclude -> "tags_exclude"
     ListPostsSticky -> "sticky"
 
-addToObjectIfPresent
-  :: ( ToJSON v
-     , GCompare k
-     )
-  => DMap k Identity
-  -> k v
-  -> Text
-  -> Object
-  -> Object
-addToObjectIfPresent dm kv label o =
-  case lookup kv dm of
-    Just (Identity v) -> HM.singleton label (toJSON v) <> o
-    Nothing           -> o
+  keys =
+    [ This ListPostsContext
+    , This ListPostsPage
+    , This ListPostsPerPage
+    , This ListPostsSearch
+    , This ListPostsAfter
+    , This ListPostsAuthor
+    , This ListPostsAuthorExclude
+    , This ListPostsBefore
+    , This ListPostsExclude
+    , This ListPostsInclude
+    , This ListPostsOffset
+    , This ListPostsOrder
+    , This ListPostsSlug
+    , This ListPostsStatus
+    , This ListPostsCategories
+    , This ListPostsCategoriesExclude
+    , This ListPostsTags
+    , This ListPostsTagsExclude
+    , This ListPostsSticky
+    ]
 
-instance GCompare ListPostsKey => ToJSON (DMap ListPostsKey Identity) where
-  toJSON dm =
-    let
-      add :: ToJSON v => ListPostsKey v -> Text -> Object -> Object
-      add = addToObjectIfPresent dm
-    in
-        Object
-      . add ListPostsContext "context"
-      . add ListPostsPage "page"
-      . add ListPostsPerPage "per_page"
-      . add ListPostsSearch "search"
-      . add ListPostsAfter "after"
-      . add ListPostsAuthor "author"
-      . add ListPostsAuthorExclude "author_exclude"
-      . add ListPostsBefore "before"
-      . add ListPostsExclude "exclude"
-      . add ListPostsInclude "include"
-      . add ListPostsOffset "offset"
-      . add ListPostsOrder "order"
-      . add ListPostsSlug "slug"
-      . add ListPostsStatus "status"
-      . add ListPostsCategories "categories"
-      . add ListPostsCategoriesExclude "categories_exclude"
-      . add ListPostsTags "tags"
-      . add ListPostsTagsExclude "tags_exclude"
-      . add ListPostsSticky "sticky"
-      $ HM.empty
+instance Show1 f => ShowTag ListPostsKey f where
+  showTaggedPrec ListPostsContext = showsPrec1
+  showTaggedPrec ListPostsPage              = showsPrec1
+  showTaggedPrec ListPostsPerPage           = showsPrec1
+  showTaggedPrec ListPostsSearch            = showsPrec1
+  showTaggedPrec ListPostsAfter             = showsPrec1
+  showTaggedPrec ListPostsAuthor            = showsPrec1
+  showTaggedPrec ListPostsAuthorExclude     = showsPrec1
+  showTaggedPrec ListPostsBefore            = showsPrec1
+  showTaggedPrec ListPostsExclude           = showsPrec1
+  showTaggedPrec ListPostsInclude           = showsPrec1
+  showTaggedPrec ListPostsOffset            = showsPrec1
+  showTaggedPrec ListPostsOrder             = showsPrec1
+  showTaggedPrec ListPostsSlug              = showsPrec1
+  showTaggedPrec ListPostsStatus            = showsPrec1
+  showTaggedPrec ListPostsCategories        = showsPrec1
+  showTaggedPrec ListPostsCategoriesExclude = showsPrec1
+  showTaggedPrec ListPostsTags              = showsPrec1
+  showTaggedPrec ListPostsTagsExclude       = showsPrec1
+  showTaggedPrec ListPostsSticky            = showsPrec1
+
+instance ToJSON1 f => ToJSONViaKey ListPostsKey f where
+  toJSONViaKey ListPostsContext           = toJSON1
+  toJSONViaKey ListPostsPage              = toJSON1
+  toJSONViaKey ListPostsPerPage           = toJSON1
+  toJSONViaKey ListPostsSearch            = toJSON1
+  toJSONViaKey ListPostsAfter             = toJSON1
+  toJSONViaKey ListPostsAuthor            = toJSON1
+  toJSONViaKey ListPostsAuthorExclude     = toJSON1
+  toJSONViaKey ListPostsBefore            = toJSON1
+  toJSONViaKey ListPostsExclude           = toJSON1
+  toJSONViaKey ListPostsInclude           = toJSON1
+  toJSONViaKey ListPostsOffset            = toJSON1
+  toJSONViaKey ListPostsOrder             = toJSON1
+  toJSONViaKey ListPostsSlug              = toJSON1
+  toJSONViaKey ListPostsStatus            = toJSON1
+  toJSONViaKey ListPostsCategories        = toJSON1
+  toJSONViaKey ListPostsCategoriesExclude = toJSON1
+  toJSONViaKey ListPostsTags              = toJSON1
+  toJSONViaKey ListPostsTagsExclude       = toJSON1
+  toJSONViaKey ListPostsSticky            = toJSON1
+
+instance Eq1 f => EqTag ListPostsKey f where
+  eqTagged ListPostsContext ListPostsContext = eq1
 
 data Status =
     Publish
@@ -365,7 +383,7 @@ data Format =
   | Status
   | Video
   | Audio
-  deriving Show
+  deriving (Eq, Show)
 
 instance FromJSON Format where
   parseJSON v = case v of
@@ -385,7 +403,7 @@ data Context =
     View
   | Edit
   | Embed
-  deriving Show
+  deriving (Eq, Show)
 
 instance ToJSON Context where
   toJSON = \case
@@ -396,7 +414,7 @@ instance ToJSON Context where
 data Order =
     Asc
   | Desc
-  deriving Show
+  deriving (Eq, Show)
 
 instance ToJSON Order where
   toJSON = \case
@@ -413,12 +431,13 @@ data OrderBy =
   | Relevance
   | Slug
   | Title
-  deriving Show
+  deriving (Eq, Show)
 
 data Sticky =
     Sticky
   | NotSticky
-  deriving Show
+  deriving (Eq, Show)
+
 instance ToJSON Sticky where
   toJSON = \case
     Sticky -> Bool True
@@ -439,7 +458,7 @@ data RP (name :: Symbol) =
   { rpRendered  :: Text
   , rpProtected :: Bool
   }
-  deriving Show
+  deriving (Eq, Show)
 
 instance KnownSymbol name => FromJSON (RP name) where
   parseJSON =
@@ -452,3 +471,4 @@ deriveGShow ''PostKey
 
 deriveGEq ''ListPostsKey
 deriveGCompare ''ListPostsKey
+deriveGShow ''ListPostsKey

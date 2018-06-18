@@ -1,17 +1,19 @@
-{-# LANGUAGE LambdaCase      #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 import           Control.Exception        (bracket)
 import           Data.ByteString          (ByteString)
 import           Data.ByteString.Char8    (pack)
-import qualified Data.Dependent.Map as DM
+import qualified Data.Dependent.Map       as DM
 import           Database.MySQL.Base      (Connection, close, connect,
                                            connectDatabase, connectHost,
                                            connectPassword, connectUser,
                                            defaultConnectInfo, query)
 import           Network.HTTP.Client      (defaultManagerSettings, newManager)
-import           Servant.Client           (BaseUrl (..), ClientEnv (ClientEnv), ServantError,
-                                           Scheme (Http), runClientM)
+import           Servant.Client           (BaseUrl (..), ClientEnv (ClientEnv),
+                                           Scheme (Http), ServantError,
+                                           runClientM)
 import           System.Environment       (getArgs)
 
 import           Test.Tasty               (TestTree, defaultMain, testGroup)
@@ -25,10 +27,7 @@ main :: IO ()
 main =
   getArgs >>= \case
     (ip:user:pass:resetFile:_) -> do
-      r <- runWithArgs ip user pass resetFile
-      case r of
-        Left e -> print e
-        Right (p:_) -> print p
+      runWithArgs ip user pass resetFile
     _ -> error "Must provide ip, WP user, WP pass, and DB reset SQL"
 
 -- <3 String
@@ -37,7 +36,7 @@ runWithArgs
   -> String
   -> String
   -> String
-  -> IO (Either ServantError [PostMap])
+  -> IO ()
 runWithArgs ip wpUser wpPassword resetSqlFile = do
   let
     dbConnInfo =
@@ -53,11 +52,10 @@ runWithArgs ip wpUser wpPassword resetSqlFile = do
     servantClient = ClientEnv mgr $ BaseUrl Http ip 80 "/wp-json/wp/v2"
     reset = resetUsing (pack resetSql)
     lp = DM.empty
-  runClientM (listPosts lp) servantClient
-  -- bracket
-  --   (connect dbConnInfo)
-  --   close
-  --   (\dbConn -> runWithEnv Env{..})
+  bracket
+    (connect dbConnInfo)
+    close
+    (\dbConn -> runWithEnv Env{..})
 
 runWithEnv
   :: Env
@@ -71,5 +69,6 @@ resetUsing
   :: ByteString
   -> Connection
   -> IO ()
-resetUsing resetSql conn =
+resetUsing resetSql conn = do
+  query conn "DROP DATABASE wordpress"
   query conn resetSql

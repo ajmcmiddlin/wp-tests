@@ -2,4 +2,4 @@
 ;;; For more information see (info "(emacs) Directory Variables")
 
 ((haskell-mode
-  (dante-target . state-tests)))
+  (dante-target . "state-tests")))
