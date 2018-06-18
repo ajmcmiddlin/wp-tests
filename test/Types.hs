@@ -9,5 +9,5 @@ data Env =
   , servantClient :: ClientEnv
   , wpUser        :: String
   , wpPassword    :: String
-  , reset         :: (Connection -> IO ())
+  , reset         :: Connection -> IO ()
   }
