@@ -81,7 +81,6 @@ runWithEnv env =
 resetUsing
   :: FilePath
   -> [String]
-  -> Connection
   -> IO ()
-resetUsing resetSql connectionArgs conn =
+resetUsing resetSql connectionArgs =
   readFile resetSql >>= void . readProcess "mysql" connectionArgs

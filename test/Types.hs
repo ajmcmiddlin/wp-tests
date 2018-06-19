@@ -17,7 +17,7 @@ data Env =
   , servantClient :: ClientEnv
   , wpUser        :: String
   , wpPassword    :: String
-  , reset         :: Connection -> IO ()
+  , reset         :: IO ()
   }
 
 type StatePosts v = Map (Var Int v) (Var PostMap v)

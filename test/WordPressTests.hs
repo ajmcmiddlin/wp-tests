@@ -119,5 +119,5 @@ propWordpress env@Env{..} =
   actions <- forAll $
     Gen.sequential (Range.linear 1 100) initialState commands
 
-  evalIO (reset dbConn)
+  evalIO reset
   executeSequential initialState actions
