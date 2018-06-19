@@ -1,2 +1,10 @@
-:set -isrc
-:set -itest
+:{
+let loadTests _ =
+      pure $ unlines [
+        ":set -isrc"
+      , ":set -itest"
+      , ":l test/Test.hs"
+      ]
+:}
+
+:def lt loadTests
