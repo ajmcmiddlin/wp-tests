@@ -1,0 +1,3 @@
+CREATE USER 'wordpress'@'%' IDENTIFIED BY 'wordpress';
+GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress' WITH GRANT OPTION;
+FLUSH PRIVILEGES;

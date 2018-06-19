@@ -22,6 +22,7 @@ wordpress =
     services.mysql = {
       enable = true;
       package = pkgs.mysql;
+      initialScript = ./init.sql;
     };
 
     services.httpd = {
@@ -49,6 +50,7 @@ wordpress =
       ];
     };
 
-    networking.firewall.allowedTCPPorts = [ 80 443 ];
+    # HTTP, HTTPS, MySQL
+    networking.firewall.allowedTCPPorts = [ 80 443 3306 ];
   };
 }
