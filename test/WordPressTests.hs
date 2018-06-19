@@ -61,7 +61,7 @@ instance HTraversable (DMap k) where
 deriving instance Eq1 v => Eq (ListPosts v)
 
 instance HTraversable ListPosts where
-  htraverse f (ListPosts dmv dmi) = undefined
+  htraverse f (ListPosts dmv dmi) = ListPosts <$> htraverse f dmv <*> pure dmi
 
 cListPosts
   :: ( MonadGen n
