@@ -1,14 +1,15 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE KindSignatures            #-}
-{-# LANGUAGE LambdaCase                #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE StandaloneDeriving        #-}
 
 module WordPressTests where
 
+import           Control.Lens             (makeFields, (^.), (&))
 import           Control.Monad.IO.Class   (MonadIO, liftIO)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
@@ -35,12 +36,7 @@ import           Test.Tasty.Hedgehog      (testProperty)
 import           Web.WordPress.API        (listPosts)
 import           Web.WordPress.Types.Post (ListPostsKey, PostMap)
 
-import           Types                    (Env (..))
-
-newtype WPState (v :: * -> *) =
-  WPState
-  { posts :: Map (Var Int v) (Var PostMap v)
-  }
+import           Types                    (Env (..), HasPosts (..), WPState (WPState))
 
 wordpressTests
   :: Env
@@ -71,7 +67,7 @@ cListPosts
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
-     --, HasPosts state
+     , HasPosts state
      )
   => Env
   -> Command n m state
@@ -87,6 +83,8 @@ cListPosts Env{..} =
         evalEither =<< liftIO (runClientM (listPosts dm) servantClient)
   in
     Command gen exe [
+      Ensure $ \so _sn _i ps ->
+        (so ^. posts & length) === length ps
     ]
 
 --------------------------------------------------------------------------------
@@ -116,7 +114,7 @@ propWordpress
 propWordpress env@Env{..} =
   testProperty "sequential" . property $ do
   let
-    commands = ($ env) <$> [cListPosts, cAddPost]
+    commands = ($ env) <$> [cListPosts] --, cAddPost]
     initialState = WPState M.empty
   actions <- forAll $
     Gen.sequential (Range.linear 1 100) initialState commands
