@@ -14,7 +14,7 @@ import           Network.HTTP.Client      (defaultManagerSettings, newManager)
 import           Servant.Client           (BaseUrl (..), ClientEnv (ClientEnv),
                                            Scheme (Http), ServantError,
                                            runClientM)
-import           System.Environment       (getArgs)
+import           System.Environment       (getEnv)
 
 import           Test.Tasty               (TestTree, defaultMain, testGroup)
 
@@ -24,11 +24,12 @@ import           Web.WordPress.Types.Post (PostMap)
 import           WordPressTests           (wordpressTests)
 
 main :: IO ()
-main =
-  getArgs >>= \case
-    (ip:user:pass:resetFile:_) ->
-      runWithArgs ip user pass resetFile
-    _ -> error "Must provide ip, WP user, WP pass, and DB reset SQL"
+main = do
+  wpHost <- getEnv "WP_HOST"
+  wpUser <- getEnv "WP_USER"
+  wpPass <- getEnv "WP_PASS"
+  wpReset <- getEnv "WP_RESET_PATH"
+  runWithArgs wpHost wpUser wpPass wpReset
 
 -- <3 String
 runWithArgs
@@ -37,11 +38,11 @@ runWithArgs
   -> String
   -> String
   -> IO ()
-runWithArgs ip wpUser wpPassword resetSqlFile = do
+runWithArgs host wpUser wpPassword resetSqlFile = do
   let
     dbConnInfo =
       defaultConnectInfo
-      { connectHost = ip
+      { connectHost = host
       , connectUser = "wordpress"
       , connectPassword = "wordpress"
       , connectDatabase = "wordpress"
@@ -49,7 +50,7 @@ runWithArgs ip wpUser wpPassword resetSqlFile = do
   resetSql <- readFile resetSqlFile
   mgr <- newManager defaultManagerSettings
   let
-    servantClient = ClientEnv mgr $ BaseUrl Http ip 80 "/wp-json/wp/v2"
+    servantClient = ClientEnv mgr $ BaseUrl Http host 80 "/wp-json/wp/v2"
     reset = resetUsing (pack resetSql)
     lp = DM.empty
   bracket
