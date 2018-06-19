@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
@@ -32,7 +33,7 @@ import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty,
                                         foldrWithKey, fromList, insert, lookup,
                                         toList)
 import           Data.Dependent.Sum    (EqTag (..), ShowTag (..), (==>))
-import           Data.Functor.Classes  (Eq1, Show1, showsPrec1, eq1)
+import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
 import           Data.Functor.Const    (Const (..))
 import           Data.Functor.Identity (Identity (Identity))
 import           Data.GADT.Compare     ((:~:) (Refl), GCompare (..), GEq (..),
@@ -50,7 +51,6 @@ import           Data.Time             (LocalTime, UTCTime)
 import           GHC.Generics          (Generic)
 import           GHC.Prim              (Proxy#, proxy#)
 import           GHC.TypeLits          (KnownSymbol, Symbol, symbolVal')
-import           Prelude               hiding (lookup)
 
 import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
                                         ToJSONViaKey (..), mkParseJSON, symName)
@@ -113,6 +113,32 @@ instance FromJSON1 f => FromJSONViaKey PostKey f where
   parseJSONViaKey PostTemplate      = parseJSON1
   parseJSONViaKey PostCategories    = parseJSON1
   parseJSONViaKey PostTags          = parseJSON1
+
+instance ToJSON1 f => ToJSONViaKey PostKey f where
+  toJSONViaKey PostDate          = toJSON1
+  toJSONViaKey PostDateGmt       = toJSON1
+  toJSONViaKey PostGuid          = toJSON1
+  toJSONViaKey PostId            = toJSON1
+  toJSONViaKey PostLink          = toJSON1
+  toJSONViaKey PostModified      = toJSON1
+  toJSONViaKey PostModifiedGmt   = toJSON1
+  toJSONViaKey PostSlug          = toJSON1
+  toJSONViaKey PostStatus        = toJSON1
+  toJSONViaKey PostType          = toJSON1
+  toJSONViaKey PostPassword      = toJSON1
+  toJSONViaKey PostTitle         = toJSON1
+  toJSONViaKey PostContent       = toJSON1
+  toJSONViaKey PostAuthor        = toJSON1
+  toJSONViaKey PostExcerpt       = toJSON1
+  toJSONViaKey PostFeaturedMedia = toJSON1
+  toJSONViaKey PostCommentStatus = toJSON1
+  toJSONViaKey PostPingStatus    = toJSON1
+  toJSONViaKey PostFormat        = toJSON1
+  toJSONViaKey PostMeta          = toJSON1
+  toJSONViaKey PostSticky        = toJSON1
+  toJSONViaKey PostTemplate      = toJSON1
+  toJSONViaKey PostCategories    = toJSON1
+  toJSONViaKey PostTags          = toJSON1
 
 instance (Applicative f, FromJSON1 f) => FromJSON (DMap PostKey f) where
   parseJSON = mkParseJSON "Post"
@@ -271,7 +297,7 @@ instance GKey ListPostsKey where
     ]
 
 instance Show1 f => ShowTag ListPostsKey f where
-  showTaggedPrec ListPostsContext = showsPrec1
+  showTaggedPrec ListPostsContext           = showsPrec1
   showTaggedPrec ListPostsPage              = showsPrec1
   showTaggedPrec ListPostsPerPage           = showsPrec1
   showTaggedPrec ListPostsSearch            = showsPrec1
@@ -314,6 +340,35 @@ instance ToJSON1 f => ToJSONViaKey ListPostsKey f where
 
 instance Eq1 f => EqTag ListPostsKey f where
   eqTagged ListPostsContext ListPostsContext = eq1
+
+
+--------------------------------------------------------------------------------
+-- CREATE
+--------------------------------------------------------------------------------
+
+-- Create inputs are a strict subset of those in posts, so reuse them.
+createKeys
+  :: [Some PostKey]
+createKeys = [
+    This PostDate
+  , This PostDateGmt
+  , This PostSlug
+  , This PostStatus
+  , This PostPassword
+  , This PostTitle
+  , This PostContent
+  , This PostAuthor
+  , This PostExcerpt
+  , This PostFeaturedMedia
+  , This PostCommentStatus
+  , This PostPingStatus
+  , This PostFormat
+  , This PostMeta
+  , This PostSticky
+  , This PostTemplate
+  , This PostCategories
+  , This PostTags
+  ]
 
 data Status =
     Publish
@@ -399,6 +454,19 @@ instance FromJSON Format where
     "audio"    -> pure Audio
     _          -> fail $ "Unknown format " <> show v
 
+instance ToJSON Format where
+  toJSON = \case
+    Standard -> "standard"
+    Aside -> "aside"
+    Chat -> "chat"
+    Gallery -> "gallery"
+    Link -> "link"
+    Image -> "image"
+    Quote -> "quote"
+    Status -> "status"
+    Video -> "video"
+    Audio -> "audio"
+
 data Context =
     View
   | Edit
@@ -446,12 +514,7 @@ instance ToJSON Sticky where
 newtype Rendered (name :: Symbol) =
   Rendered
   { rendered :: Text }
-  deriving (Show)
-
-instance KnownSymbol name => FromJSON (Rendered name) where
-  parseJSON =
-      withObject (symName @name) $ \v ->
-        Rendered <$> v .: "rendered"
+  deriving (Generic, Show, FromJSON, ToJSON)
 
 data RP (name :: Symbol) =
   RP
@@ -464,6 +527,13 @@ instance KnownSymbol name => FromJSON (RP name) where
   parseJSON =
     withObject (symName @name) $ \v ->
       RP <$> v .: "rendered" <*> v .: "protected"
+
+instance ToJSON (RP name) where
+  toJSON RP{..} =
+    object [
+      ("rendered", toJSON rpRendered)
+    , ("protected", toJSON rpProtected)
+    ]
 
 deriveGEq ''PostKey
 deriveGCompare ''PostKey
