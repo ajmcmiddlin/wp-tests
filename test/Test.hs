@@ -6,6 +6,9 @@ import           Control.Exception        (bracket)
 import           Data.ByteString          (ByteString)
 import           Data.ByteString.Char8    (pack)
 import qualified Data.Dependent.Map       as DM
+import           Data.Foldable            (traverse_)
+import           Data.Functor             (void)
+import           Data.Semigroup           ((<>))
 import           Database.MySQL.Base      (Connection, close, connect,
                                            connectDatabase, connectHost,
                                            connectPassword, connectUser,
@@ -15,6 +18,7 @@ import           Servant.Client           (BaseUrl (..), ClientEnv (ClientEnv),
                                            Scheme (Http), ServantError,
                                            runClientM)
 import           System.Environment       (getEnv)
+import           System.Process           (readProcess)
 
 import           Test.Tasty               (TestTree, defaultMain, testGroup)
 
@@ -40,18 +44,26 @@ runWithArgs
   -> IO ()
 runWithArgs host wpUser wpPassword resetSqlFile = do
   let
+    dbUser = "wordpress"
+    dbPassword = "wordpress"
+    dbDatabase = "wordpress"
     dbConnInfo =
       defaultConnectInfo
       { connectHost = host
-      , connectUser = "wordpress"
-      , connectPassword = "wordpress"
-      , connectDatabase = "wordpress"
+      , connectUser = dbUser
+      , connectPassword = dbPassword
+      , connectDatabase = dbDatabase
       }
-  resetSql <- readFile resetSqlFile
+    dbCmdLineArgs =
+      [ "-h", host
+      , "-u", dbUser
+      , "--password=" <> dbPassword
+      , dbDatabase
+      ]
   mgr <- newManager defaultManagerSettings
   let
     servantClient = ClientEnv mgr $ BaseUrl Http host 80 "/wp-json/wp/v2"
-    reset = resetUsing (pack resetSql)
+    reset = resetUsing resetSqlFile dbCmdLineArgs
     lp = DM.empty
   bracket
     (connect dbConnInfo)
@@ -67,9 +79,9 @@ runWithEnv env =
   ]
 
 resetUsing
-  :: ByteString
+  :: FilePath
+  -> [String]
   -> Connection
   -> IO ()
-resetUsing resetSql conn = do
-  query conn "DROP DATABASE wordpress"
-  query conn resetSql
+resetUsing resetSql connectionArgs conn =
+  readFile resetSql >>= void . readProcess "mysql" connectionArgs

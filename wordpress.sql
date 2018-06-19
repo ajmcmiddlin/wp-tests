@@ -19,6 +19,8 @@
 -- Current Database: `wordpress`
 --
 
+DROP DATABASE `wordpress`;
+
 CREATE DATABASE /*!32312 IF NOT EXISTS*/ `wordpress` /*!40100 DEFAULT CHARACTER SET utf8 */;
 
 USE `wordpress`;
