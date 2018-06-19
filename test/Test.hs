@@ -26,7 +26,7 @@ import           WordPressTests           (wordpressTests)
 main :: IO ()
 main =
   getArgs >>= \case
-    (ip:user:pass:resetFile:_) -> do
+    (ip:user:pass:resetFile:_) ->
       runWithArgs ip user pass resetFile
     _ -> error "Must provide ip, WP user, WP pass, and DB reset SQL"
 
