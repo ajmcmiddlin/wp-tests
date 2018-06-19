@@ -3,6 +3,7 @@ let
   env = import ./env.nix {inherit nixpkgs compiler; };
   devTools =
     [ env.pkgs.cabal-install
+      env.pkgs.mariadb
       env.haskellPackages.stylish-haskell
       env.haskellPackages.apply-refact
       env.haskellPackages.hlint
