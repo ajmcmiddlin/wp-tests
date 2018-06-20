@@ -37,7 +37,7 @@ import           Test.Tasty               (TestTree, testGroup)
 import           Test.Tasty.Hedgehog      (testProperty)
 
 import           Web.WordPress.API        (listPosts, createPost)
-import           Web.WordPress.Types.Post (ListPostsKey, PostMap, PostKey (..))
+import           Web.WordPress.Types.Post (ListPostsKey, PostMap, PostKey (..), Rendered (..))
 
 import           Types                    (Env (..), HasPosts (..),
                                            WPState (WPState))
@@ -138,37 +138,45 @@ cCreatePost Env{..} =
     Command gen exe [
     ]
 
+genRP
+  :: MonadGen n
+  => Int
+  -> Int
+  -> n (CreatePost Identity)
+genRP min max =
+  RP <$> genUni min max <*> Gen.bool
+
 genCreate
   :: MonadGen n
   => state (v :: * -> *)
-  -> n (CreatePost v)
+  -> n (CreatePost Identity)
 genCreate s =
   let
-    genUni = Gen.text (Range.linear 1 20) Gen.unicode
     gensI = [
         PostDateGmt :=> genUTCTime
-      , PostSlug :=> genUni
+      , PostSlug :=> genUni 0 30
+      , PostStatus :=> Gen.enumBounded
+     -- , PostPassword
+      , PostTitle :=> Rendered <$> genUni 0 30
+      , PostContent :=> genRP 0 500
+      -- TODO: author should come from state. Start state has user with ID = 1.
+      , PostAuthor :=> pure 1
+     -- , PostExcerpt
+     -- , PostFeaturedMedia
+     -- , PostCommentStatus
+     -- , PostPingStatus
+     -- , PostFormat
+     -- , PostMeta
+     -- , PostSticky
+     -- , PostTemplate
+     -- , PostCategories
+     -- , PostTags
       ]
-    gensV = []
-    f = traverse (\(kv :=> fv) -> fmap ((kv :=>) . pure) fv)
+    gensV = [
+      ]
+    f = fmap DM.fromList . traverse (\(kv :=> fv) -> fmap ((kv :=>) . pure) fv)
   in
     CreatePost <$> f gensV <*> f gensI
-  -- , This PostSlug
-  -- , This PostStatus
-  -- , This PostPassword
-  -- , This PostTitle
-  -- , This PostContent
-  -- , This PostAuthor
-  -- , This PostExcerpt
-  -- , This PostFeaturedMedia
-  -- , This PostCommentStatus
-  -- , This PostPingStatus
-  -- , This PostFormat
-  -- , This PostMeta
-  -- , This PostSticky
-  -- , This PostTemplate
-  -- , This PostCategories
-  -- , This PostTags
 
 genUTCTime
   :: MonadGen n
@@ -185,3 +193,11 @@ genUTCTime =
     gDiffTime = secondsToDiffTime . fromIntegral <$> gSeconds
   in
     UTCTime <$> gUTCTimeDay <*> gDiffTime
+
+genUni
+  :: MonadGen n
+  => Int
+  -> Int
+  -> n Text
+genUni min max =
+  Gen.text (Range.linear min max) Gen.unicode

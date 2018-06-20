@@ -376,7 +376,7 @@ data Status =
   | Draft
   | Pending
   | Private
-  deriving Show
+  deriving (Enum, Bounded, Show)
 
 instance ToJSON Status where
   toJSON = \case
