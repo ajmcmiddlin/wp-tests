@@ -11,6 +11,8 @@ module WordPressTests where
 
 import           Control.Lens             (makeFields, (&), (^.))
 import           Control.Monad.IO.Class   (MonadIO, liftIO)
+import           Data.Aeson               (encode)
+import           Data.Bool                (bool)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
 import           Data.Dependent.Sum       (DSum (..), EqTag)
@@ -18,7 +20,7 @@ import           Data.Functor.Classes     (Eq1)
 import           Data.Functor.Identity    (Identity (..))
 import           Data.Map                 (Map)
 import qualified Data.Map                 as M
-import   qualified        Data.Text as T
+import qualified Data.Text                as T
 import           Data.Time                (UTCTime (UTCTime), fromGregorian,
                                            secondsToDiffTime, utc,
                                            utcToLocalTime)
@@ -50,14 +52,14 @@ wordpressTests
   -> TestTree
 wordpressTests env =
   testGroup "wordpress" [
-    propWordpress env
+    testProperty "sequential" $ propWordpress env
   ]
 
 propWordpress
   :: Env
-  -> TestTree
+  -> Property
 propWordpress env@Env{..} =
-  testProperty "sequential" . property $ do
+  property $ do
   let
     commands = ($ env) <$> [cListPosts, cCreatePost]
     initialState = WPState M.empty
@@ -131,13 +133,13 @@ cCreatePost
 cCreatePost Env{..} =
   let
     gen = Just . genCreate
-    exe (CreatePost dmv dmi) =
+    exe (CreatePost dmv dmi) = do
       let
         dmi' = DM.map (\(Concrete a) -> Identity a) dmv
         dm = DM.union dmi' dmi
         auth = BasicAuthData wpUser wpPassword
-      in
-        evalEither =<< liftIO (runClientM (createPost auth dm) servantClient)
+      annotateShow $ encode dm
+      evalEither =<< liftIO (runClientM (createPost auth dm) servantClient)
   in
     Command gen exe [
     ]
@@ -148,22 +150,23 @@ genRP
   -> Int
   -> n (RP name)
 genRP min max =
-  RP <$> genUni min max <*> Gen.bool
+  RP <$> genAlphaNum min max <*> Gen.bool
 
 genCreate
   :: MonadGen n
   => state (v :: * -> *)
   -> n (CreatePost v)
 genCreate s = do
-  content <- genUni 1 500
-  excerpt <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
+  content <- genAlphaNum 1 500
+  excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
   let
+    excerpt = bool content excerpt' (T.null excerpt')
     gensI = [
         PostDateGmt :=> genUTCTime
-      , PostSlug :=> genUni 0 30
+      , PostSlug :=> genAlphaNum 0 30
       , PostStatus :=> Gen.enumBounded
      -- , PostPassword
-      , PostTitle :=> Rendered <$> genUni 1 30
+      , PostTitle :=> Rendered <$> genAlphaNum 1 30
       , PostContent :=> RP content <$> Gen.bool
       -- TODO: author should come from state. Start state has user with ID = 1.
       , PostAuthor :=> pure 1
@@ -199,10 +202,10 @@ genUTCTime =
   in
     UTCTime <$> gUTCTimeDay <*> gDiffTime
 
-genUni
+genAlphaNum
   :: MonadGen n
   => Int
   -> Int
   -> n T.Text
-genUni min max =
-  Gen.text (Range.linear min max) Gen.unicode
+genAlphaNum min max =
+  Gen.text (Range.linear min max) Gen.alphaNum

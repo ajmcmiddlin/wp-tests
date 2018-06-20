@@ -198,6 +198,33 @@ instance GKey PostKey where
     PostCategories -> "categories"
     PostTags -> "tags"
 
+  fromFieldName = \case
+    "date" -> Just (This PostDate)
+    "date_gmt" -> Just (This PostDateGmt)
+    "guid" -> Just (This PostGuid)
+    "id" -> Just (This PostId)
+    "link" -> Just (This PostLink)
+    "modified" -> Just (This PostModified)
+    "modifiedGmt" -> Just (This PostModifiedGmt)
+    "slug" -> Just (This PostSlug)
+    "status" -> Just (This PostStatus)
+    "type" -> Just (This PostType)
+    "password" -> Just (This PostPassword)
+    "title" -> Just (This PostTitle)
+    "content" -> Just (This PostContent)
+    "author" -> Just (This PostAuthor)
+    "excerpt" -> Just (This PostExcerpt)
+    "featured_media" -> Just (This PostFeaturedMedia)
+    "comment_status" -> Just (This PostCommentStatus)
+    "ping_status" -> Just (This PostPingStatus)
+    "format" -> Just (This PostFormat)
+    "meta" -> Just (This PostMeta)
+    "sticky" -> Just (This PostSticky)
+    "template" -> Just (This PostTemplate)
+    "categories" -> Just (This PostCategories)
+    "tags" -> Just (This PostTags)
+    _ -> Nothing
+
   keys = [
       This PostDate
     , This PostDateGmt
@@ -273,6 +300,28 @@ instance GKey ListPostsKey where
     ListPostsTags -> "tags"
     ListPostsTagsExclude -> "tags_exclude"
     ListPostsSticky -> "sticky"
+
+  fromFieldName = \case
+    "context" -> Just (This ListPostsContext)
+    "page" -> Just (This ListPostsPage)
+    "per_page" -> Just (This ListPostsPerPage)
+    "search" -> Just (This ListPostsSearch)
+    "after" -> Just (This ListPostsAfter)
+    "author" -> Just (This ListPostsAuthor)
+    "author_exclude" -> Just (This ListPostsAuthorExclude)
+    "before" -> Just (This ListPostsBefore)
+    "exclude" -> Just (This ListPostsExclude)
+    "include" -> Just (This ListPostsInclude)
+    "offset" -> Just (This ListPostsOffset)
+    "order" -> Just (This ListPostsOrder)
+    "slug" -> Just (This ListPostsSlug)
+    "status" -> Just (This ListPostsStatus)
+    "categories" -> Just (This ListPostsCategories)
+    "categories_exclude" -> Just (This ListPostsCategoriesExclude)
+    "tags" -> Just (This ListPostsTags)
+    "tags_exclude" -> Just (This ListPostsTagsExclude)
+    "sticky" -> Just (This ListPostsSticky)
+    _ -> Nothing
 
   keys =
     [ This ListPostsContext
@@ -514,7 +563,16 @@ instance ToJSON Sticky where
 newtype Rendered (name :: Symbol) =
   Rendered
   { rendered :: Text }
-  deriving (Generic, Show, FromJSON, ToJSON)
+  deriving (Show)
+
+instance KnownSymbol name => FromJSON (Rendered name) where
+  parseJSON =
+      withObject (symName @name) $ \v ->
+        Rendered <$> v .: "rendered"
+
+instance ToJSON (Rendered name) where
+  toJSON (Rendered name) =
+    object [("rendered", toJSON name)]
 
 data RP (name :: Symbol) =
   RP

@@ -6,7 +6,7 @@ import           Control.Lens             (Getter, to)
 import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
 import           Data.Map                 (Map)
-import           Database.MySQL.Base      (Connection)
+import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
 import           Web.WordPress.Types.Post (PostMap)
 
@@ -14,7 +14,7 @@ import           Hedgehog                 (Var)
 
 data Env =
   Env
-  { dbConn        :: Connection
+  { dbConnInfo    :: ConnectInfo
   , servantClient :: ClientEnv
   , wpUser        :: ByteString
   , wpPassword    :: ByteString

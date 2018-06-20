@@ -28,21 +28,17 @@ import           Web.WordPress.Types.Post (PostMap)
 import           WordPressTests           (wordpressTests)
 
 main :: IO ()
-main = do
-  wpHost <- getEnv "WP_HOST"
-  wpUser <- getEnv "WP_USER"
-  wpPass <- getEnv "WP_PASS"
-  wpReset <- getEnv "WP_RESET_PATH"
-  runWithArgs wpHost (BS8.pack wpUser) (BS8.pack wpPass) wpReset
+main =
+  mkEnv >>= runWithEnv
 
--- <3 String
-runWithArgs
-  :: String
-  -> ByteString
-  -> ByteString
-  -> String
-  -> IO ()
-runWithArgs host wpUser wpPassword resetSqlFile = do
+mkEnv
+  :: IO Env
+mkEnv = do
+  mgr <- newManager defaultManagerSettings
+  host <- getEnv "WP_HOST"
+  wpUser <- BS8.pack <$> getEnv "WP_USER"
+  wpPassword <- BS8.pack <$> getEnv "WP_PASS"
+  resetSqlFile <- getEnv "WP_RESET_PATH"
   let
     dbUser = "wordpress"
     dbPassword = "wordpress"
@@ -60,15 +56,10 @@ runWithArgs host wpUser wpPassword resetSqlFile = do
       , "--password=" <> dbPassword
       , dbDatabase
       ]
-  mgr <- newManager defaultManagerSettings
-  let
     servantClient = ClientEnv mgr $ BaseUrl Http host 80 "/wp-json/wp/v2"
     reset = resetUsing resetSqlFile dbCmdLineArgs
     lp = DM.empty
-  bracket
-    (connect dbConnInfo)
-    close
-    (\dbConn -> runWithEnv Env{..})
+  pure Env{..}
 
 runWithEnv
   :: Env

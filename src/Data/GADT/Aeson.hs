@@ -101,7 +101,6 @@ mkParseJSON t = withObject t $ \o ->
   let
     add :: Some k -> Parser (DMap k f) -> Parser (DMap k f)
     add (This k) pDm = do
-      dm <- pDm
       mv <- o .:? toFieldName k
       ma <- maybe (pure Nothing) (fmap Just . parseJSONViaKey k) mv
       maybe id (insert k) ma <$> pDm

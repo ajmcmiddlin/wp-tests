@@ -14,9 +14,9 @@ mkDerivation {
     text time unordered-containers
   ];
   testHaskellDepends = [
-    base bytestring containers dependent-map dependent-sum hedgehog
-    http-client http-types lens mysql process servant servant-client
-    tasty tasty-hedgehog text time
+    aeson base bytestring containers dependent-map dependent-sum
+    hedgehog http-client http-types lens mysql process servant
+    servant-client tasty tasty-hedgehog text time
   ];
   description = "Hedgehog state machine tests for WordPress";
   license = stdenv.lib.licenses.bsd3;
