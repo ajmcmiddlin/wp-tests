@@ -13,14 +13,16 @@ import           Control.Lens             (makeFields, (&), (^.))
 import           Control.Monad.IO.Class   (MonadIO, liftIO)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
-import           Data.Dependent.Sum       (EqTag, DSum (..))
+import           Data.Dependent.Sum       (DSum (..), EqTag)
 import           Data.Functor.Classes     (Eq1)
 import           Data.Functor.Identity    (Identity (..))
 import           Data.Map                 (Map)
 import qualified Data.Map                 as M
+import   qualified        Data.Text as T
 import           Data.Time                (UTCTime (UTCTime), fromGregorian,
                                            secondsToDiffTime, utc,
                                            utcToLocalTime)
+import           Servant.API              (BasicAuthData (BasicAuthData))
 import           Servant.Client           (runClientM)
 
 import           Hedgehog                 (Callback (..), Command (Command),
@@ -36,8 +38,9 @@ import qualified Hedgehog.Range           as Range
 import           Test.Tasty               (TestTree, testGroup)
 import           Test.Tasty.Hedgehog      (testProperty)
 
-import           Web.WordPress.API        (listPosts, createPost)
-import           Web.WordPress.Types.Post (ListPostsKey, PostMap, PostKey (..), Rendered (..))
+import           Web.WordPress.API        (createPost, listPosts)
+import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), PostMap,
+                                           RP (RP), Rendered (..))
 
 import           Types                    (Env (..), HasPosts (..),
                                            WPState (WPState))
@@ -56,7 +59,7 @@ propWordpress
 propWordpress env@Env{..} =
   testProperty "sequential" . property $ do
   let
-    commands = ($ env) <$> [cListPosts] --, cAddPost]
+    commands = ($ env) <$> [cListPosts, cCreatePost]
     initialState = WPState M.empty
   actions <- forAll $
     Gen.sequential (Range.linear 1 100) initialState commands
@@ -107,7 +110,7 @@ cListPosts Env{..} =
     ]
 
 --------------------------------------------------------------------------------
--- ADD
+-- CREATE
 --------------------------------------------------------------------------------
 data CreatePost (v :: * -> *) =
   CreatePost (DMap PostKey v) (DMap PostKey Identity)
@@ -127,13 +130,14 @@ cCreatePost
   -> Command n m state
 cCreatePost Env{..} =
   let
-    gen s = Just genCreate
+    gen = Just . genCreate
     exe (CreatePost dmv dmi) =
       let
         dmi' = DM.map (\(Concrete a) -> Identity a) dmv
         dm = DM.union dmi' dmi
+        auth = BasicAuthData wpUser wpPassword
       in
-        evalEither =<< liftIO (runClientM (createPost dm) servantClient)
+        evalEither =<< liftIO (runClientM (createPost auth dm) servantClient)
   in
     Command gen exe [
     ]
@@ -142,26 +146,28 @@ genRP
   :: MonadGen n
   => Int
   -> Int
-  -> n (CreatePost Identity)
+  -> n (RP name)
 genRP min max =
   RP <$> genUni min max <*> Gen.bool
 
 genCreate
   :: MonadGen n
   => state (v :: * -> *)
-  -> n (CreatePost Identity)
-genCreate s =
+  -> n (CreatePost v)
+genCreate s = do
+  content <- genUni 1 500
+  excerpt <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
   let
     gensI = [
         PostDateGmt :=> genUTCTime
       , PostSlug :=> genUni 0 30
       , PostStatus :=> Gen.enumBounded
      -- , PostPassword
-      , PostTitle :=> Rendered <$> genUni 0 30
-      , PostContent :=> genRP 0 500
+      , PostTitle :=> Rendered <$> genUni 1 30
+      , PostContent :=> RP content <$> Gen.bool
       -- TODO: author should come from state. Start state has user with ID = 1.
       , PostAuthor :=> pure 1
-     -- , PostExcerpt
+      , PostExcerpt :=> RP excerpt <$> Gen.bool
      -- , PostFeaturedMedia
      -- , PostCommentStatus
      -- , PostPingStatus
@@ -172,11 +178,10 @@ genCreate s =
      -- , PostCategories
      -- , PostTags
       ]
-    gensV = [
-      ]
+    -- gensV = [
+    --   ]
     f = fmap DM.fromList . traverse (\(kv :=> fv) -> fmap ((kv :=>) . pure) fv)
-  in
-    CreatePost <$> f gensV <*> f gensI
+  CreatePost <$> pure DM.empty <*> f gensI
 
 genUTCTime
   :: MonadGen n
@@ -198,6 +203,6 @@ genUni
   :: MonadGen n
   => Int
   -> Int
-  -> n Text
+  -> n T.Text
 genUni min max =
   Gen.text (Range.linear min max) Gen.unicode

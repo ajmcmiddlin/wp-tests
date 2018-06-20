@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
 
 set -x WP_HOST 192.168.56.101
-set -x WP_USER wordpress
-set -x WP_PASS wordpress
+set -x WP_USER andrew
+set -x WP_PASS 1234abcd
 set -x WP_RESET_PATH wordpress.sql
 
 ghci

@@ -4,7 +4,7 @@
 
 import           Control.Exception        (bracket)
 import           Data.ByteString          (ByteString)
-import           Data.ByteString.Char8    (pack)
+import qualified Data.ByteString.Char8    as BS8
 import qualified Data.Dependent.Map       as DM
 import           Data.Foldable            (traverse_)
 import           Data.Functor             (void)
@@ -33,13 +33,13 @@ main = do
   wpUser <- getEnv "WP_USER"
   wpPass <- getEnv "WP_PASS"
   wpReset <- getEnv "WP_RESET_PATH"
-  runWithArgs wpHost wpUser wpPass wpReset
+  runWithArgs wpHost (BS8.pack wpUser) (BS8.pack wpPass) wpReset
 
 -- <3 String
 runWithArgs
   :: String
-  -> String
-  -> String
+  -> ByteString
+  -> ByteString
   -> String
   -> IO ()
 runWithArgs host wpUser wpPassword resetSqlFile = do

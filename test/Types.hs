@@ -2,7 +2,8 @@
 
 module Types where
 
-import           Control.Lens             (to, Getter)
+import           Control.Lens             (Getter, to)
+import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
 import           Data.Map                 (Map)
 import           Database.MySQL.Base      (Connection)
@@ -15,8 +16,8 @@ data Env =
   Env
   { dbConn        :: Connection
   , servantClient :: ClientEnv
-  , wpUser        :: String
-  , wpPassword    :: String
+  , wpUser        :: ByteString
+  , wpPassword    :: ByteString
   , reset         :: IO ()
   }
 
