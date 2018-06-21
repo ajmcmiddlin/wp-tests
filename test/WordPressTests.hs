@@ -41,8 +41,8 @@ import           Test.Tasty               (TestTree, testGroup)
 import           Test.Tasty.Hedgehog      (testProperty)
 
 import           Web.WordPress.API        (createPost, listPosts)
-import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), PostMap,
-                                           RP (RP), Rendered (..), Create)
+import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), CreatePostMap,
+                                           RP (RP), Rendered (..))
 
 import           Types                    (Env (..), HasPosts (..),
                                            WPState (WPState))
@@ -101,7 +101,7 @@ cListPosts Env{..} =
       Just . pure $ ListPosts DM.empty DM.empty
     exe (ListPosts dmv dmi) =
       let
-        dmi' = DM.map (\(Concrete a) -> Identity a) dmv
+        dmi' = DM.map (\(Concrete a) -> pure a) dmv
         dm = DM.union dmi' dmi
       in
         evalEither =<< liftIO (runClientM (listPosts dm) servantClient)
@@ -115,7 +115,7 @@ cListPosts Env{..} =
 -- CREATE
 --------------------------------------------------------------------------------
 data CreatePost (v :: * -> *) =
-  CreatePost (DMap PostKey v) (DMap PostKey Create)
+  CreatePost (DMap PostKey v) CreatePostMap
   deriving (Show)
 
 instance HTraversable CreatePost where
@@ -135,7 +135,7 @@ cCreatePost Env{..} =
     gen = Just . genCreate
     exe (CreatePost dmv dmi) = do
       let
-        dmi' = DM.map (\(Concrete a) -> Identity a) dmv
+        dmi' = DM.map (\(Concrete a) -> pure a) dmv
         dm = DM.union dmi' dmi
         auth = BasicAuthData wpUser wpPassword
       annotateShow $ encode dm
@@ -156,7 +156,7 @@ genCreate
   :: MonadGen n
   => state (v :: * -> *)
   -> n (CreatePost v)
-genCreate s = do
+genCreate _s = do
   content <- genAlphaNum 1 500
   excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
   let

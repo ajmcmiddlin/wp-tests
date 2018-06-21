@@ -1,8 +1,8 @@
 { mkDerivation, aeson, base, bytestring, containers, dependent-map
-, dependent-sum, dependent-sum-template, ghc-prim, hedgehog
-, http-client, http-media, http-types, lens, mysql, process
-, servant, servant-client, stdenv, tasty, tasty-hedgehog, text
-, time, unordered-containers
+, dependent-sum, dependent-sum-template, deriving-compat, ghc-prim
+, hedgehog, http-client, http-media, http-types, lens, mysql
+, process, servant, servant-client, stdenv, tasty, tasty-hedgehog
+, text, time, unordered-containers
 }:
 mkDerivation {
   pname = "wp-test";
@@ -10,8 +10,8 @@ mkDerivation {
   src = ./.;
   libraryHaskellDepends = [
     aeson base containers dependent-map dependent-sum
-    dependent-sum-template ghc-prim http-media servant servant-client
-    text time unordered-containers
+    dependent-sum-template deriving-compat ghc-prim http-media servant
+    servant-client text time unordered-containers
   ];
   testHaskellDepends = [
     aeson base bytestring containers dependent-map dependent-sum

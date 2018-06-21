@@ -27,9 +27,8 @@
 module Web.WordPress.Types.Post where
 
 import           Data.Aeson            (FromJSON (..), ToJSON (..),
-                                        Value (Bool), object,
-                                        withObject, (.:))
-import           Data.Aeson.Types      (FromJSON1, ToJSON1, parseJSON1, toJSON1)
+                                        Value (Bool), object, withObject, (.:))
+import           Data.Aeson.Types      (FromJSON1, ToJSON1 (..), parseJSON1, toJSON1)
 import           Data.Dependent.Map    (DMap)
 import           Data.Dependent.Sum    (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
@@ -41,7 +40,9 @@ import           Data.Set              (Set)
 import           Data.Some             (Some (This))
 import           Data.Text             (Text)
 import           Data.Time             (LocalTime, UTCTime)
+import           GHC.Generics          (Generic1)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
+import           Text.Show.Deriving    (deriveShow1)
 
 import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
                                         ToJSONViaKey (..), mkParseJSON, symName)
@@ -244,6 +245,7 @@ instance GKey PostKey where
     ]
 
 type PostMap = DMap PostKey Identity
+type CreatePostMap = DMap PostKey Create
 
 type ListPostsMap = DMap ListPostsKey Identity
 
@@ -573,7 +575,10 @@ instance ToJSON Sticky where
 -- so we use this type wrapper around values in dependent maps to get the correct encoding.
 newtype Create a =
   Create a
-  deriving (Eq, Show, Functor, Show1)
+  deriving (Eq, Show, Functor, Generic1)
+
+instance ToJSON1 Create where
+  liftToJSON tj _tjl (Create a) = 
 
 instance Applicative Create where
   pure = Create
@@ -625,3 +630,5 @@ deriveGShow ''PostKey
 deriveGEq ''ListPostsKey
 deriveGCompare ''ListPostsKey
 deriveGShow ''ListPostsKey
+
+deriveShow1 ''Create
