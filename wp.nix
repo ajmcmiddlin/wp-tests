@@ -17,6 +17,19 @@ wordpress =
       # Installing simply means copying all files to the output directory
       installPhase = "mkdir -p $out; cp -R * $out/";
     };
+
+    twentySeventeen = pkgs.stdenv.mkDerivation {
+      name = "theme-twenty-seventeen";
+      # Download the theme from the wordpress site
+      src = pkgs.fetchurl {
+        url = https://downloads.wordpress.org/theme/twentyseventeen.1.6.zip;
+        sha256 = "0cch9bvap4r0775f055mynbf0d6k8zrqyn2mdwkbn6rr12hn526b";
+      };
+      # We need unzip to build this package
+      buildInputs = [ pkgs.unzip ];
+      # Installing simply means copying all files to the output directory
+      installPhase = "mkdir -p $out; cp -R * $out/";
+    };
   in
   {
     services.mysql = {
@@ -44,6 +57,7 @@ wordpress =
                 wordpressUploads = "/data/uploads";
                 languages = [ "en_GB" ];
                 plugins = [ basicAuthPlugin ];
+                themes = [ twentySeventeen ];
               }
             ];
         }
