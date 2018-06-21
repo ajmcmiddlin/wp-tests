@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -21,36 +22,26 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
+{-# OPTIONS_GHC -Wno-unused-matches#-}
+
 module Web.WordPress.Types.Post where
 
-import           Control.Applicative   (liftA2, liftA3)
-import           Data.Aeson            (FromJSON (..), Object, ToJSON (..),
-                                        Value (Bool, Object), object,
-                                        withObject, (.:), (.:?), (.=))
-import           Data.Aeson.Types      (FromJSON1, Pair, Parser, ToJSON1,
-                                        parseJSON1, toJSON1)
-import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty,
-                                        foldrWithKey, fromList, insert, lookup,
-                                        toList)
-import           Data.Dependent.Sum    (EqTag (..), ShowTag (..), (==>))
+import           Data.Aeson            (FromJSON (..), ToJSON (..),
+                                        Value (Bool), object,
+                                        withObject, (.:))
+import           Data.Aeson.Types      (FromJSON1, ToJSON1, parseJSON1, toJSON1)
+import           Data.Dependent.Map    (DMap)
+import           Data.Dependent.Sum    (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
-import           Data.Functor.Const    (Const (..))
-import           Data.Functor.Identity (Identity (Identity))
-import           Data.GADT.Compare     ((:~:) (Refl), GCompare (..), GEq (..),
-                                        GOrdering (..))
+import           Data.Functor.Identity (Identity)
 import           Data.GADT.Compare.TH  (deriveGCompare, deriveGEq)
 import           Data.GADT.Show.TH     (deriveGShow)
-import qualified Data.HashMap.Strict   as HM
-import           Data.Maybe            (maybe)
-import           Data.Proxy            (Proxy (..))
 import           Data.Semigroup        ((<>))
 import           Data.Set              (Set)
 import           Data.Some             (Some (This))
-import           Data.Text             (Text, pack)
+import           Data.Text             (Text)
 import           Data.Time             (LocalTime, UTCTime)
-import           GHC.Generics          (Generic)
-import           GHC.Prim              (Proxy#, proxy#)
-import           GHC.TypeLits          (KnownSymbol, Symbol, symbolVal')
+import           GHC.TypeLits          (KnownSymbol, Symbol)
 
 import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
                                         ToJSONViaKey (..), mkParseJSON, symName)
@@ -388,8 +379,26 @@ instance ToJSON1 f => ToJSONViaKey ListPostsKey f where
   toJSONViaKey ListPostsSticky            = toJSON1
 
 instance Eq1 f => EqTag ListPostsKey f where
-  eqTagged ListPostsContext ListPostsContext = eq1
-
+  eqTagged ListPostsContext ListPostsContext                     = eq1
+  eqTagged ListPostsPage ListPostsPage                           = eq1
+  eqTagged ListPostsPerPage ListPostsPerPage                     = eq1
+  eqTagged ListPostsSearch ListPostsSearch                       = eq1
+  eqTagged ListPostsAfter ListPostsAfter                         = eq1
+  eqTagged ListPostsAuthor ListPostsAuthor                       = eq1
+  eqTagged ListPostsAuthorExclude ListPostsAuthorExclude         = eq1
+  eqTagged ListPostsBefore ListPostsBefore                       = eq1
+  eqTagged ListPostsExclude ListPostsExclude                     = eq1
+  eqTagged ListPostsInclude ListPostsInclude                     = eq1
+  eqTagged ListPostsOffset ListPostsOffset                       = eq1
+  eqTagged ListPostsOrder ListPostsOrder                         = eq1
+  eqTagged ListPostsSlug ListPostsSlug                           = eq1
+  eqTagged ListPostsStatus ListPostsStatus                       = eq1
+  eqTagged ListPostsCategories ListPostsCategories               = eq1
+  eqTagged ListPostsCategoriesExclude ListPostsCategoriesExclude = eq1
+  eqTagged ListPostsTags ListPostsTags                           = eq1
+  eqTagged ListPostsTagsExclude ListPostsTagsExclude             = eq1
+  eqTagged ListPostsSticky ListPostsSticky                       = eq1
+  eqTagged _ _ = \_ _ -> False
 
 --------------------------------------------------------------------------------
 -- CREATE
@@ -425,7 +434,7 @@ data Status =
   | Draft
   | Pending
   | Private
-  deriving (Enum, Bounded, Show)
+  deriving (Eq, Enum, Bounded, Show)
 
 instance ToJSON Status where
   toJSON = \case
@@ -560,6 +569,16 @@ instance ToJSON Sticky where
     Sticky -> Bool True
     NotSticky -> Bool False
 
+-- The JSON representation of values changes depending on the context in which they're being used,
+-- so we use this type wrapper around values in dependent maps to get the correct encoding.
+newtype Create a =
+  Create a
+  deriving (Eq, Show, Functor, Show1)
+
+instance Applicative Create where
+  pure = Create
+  Create f <*> Create a = Create (f a)
+
 newtype Rendered (name :: Symbol) =
   Rendered
   { rendered :: Text }
@@ -571,8 +590,11 @@ instance KnownSymbol name => FromJSON (Rendered name) where
         Rendered <$> v .: "rendered"
 
 instance ToJSON (Rendered name) where
-  toJSON (Rendered name) =
-    object [("rendered", toJSON name)]
+  toJSON (Rendered t) =
+    object [("rendered", toJSON t)]
+
+instance ToJSON (Create (Rendered name)) where
+  toJSON (Create (Rendered t)) = toJSON t
 
 data RP (name :: Symbol) =
   RP
@@ -592,6 +614,9 @@ instance ToJSON (RP name) where
       ("rendered", toJSON rpRendered)
     , ("protected", toJSON rpProtected)
     ]
+
+instance ToJSON (Create (RP name)) where
+  toJSON (Create (RP t _)) = toJSON t
 
 deriveGEq ''PostKey
 deriveGCompare ''PostKey

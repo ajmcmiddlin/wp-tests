@@ -42,7 +42,7 @@ import           Test.Tasty.Hedgehog      (testProperty)
 
 import           Web.WordPress.API        (createPost, listPosts)
 import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), PostMap,
-                                           RP (RP), Rendered (..))
+                                           RP (RP), Rendered (..), Create)
 
 import           Types                    (Env (..), HasPosts (..),
                                            WPState (WPState))
@@ -115,7 +115,7 @@ cListPosts Env{..} =
 -- CREATE
 --------------------------------------------------------------------------------
 data CreatePost (v :: * -> *) =
-  CreatePost (DMap PostKey v) (DMap PostKey Identity)
+  CreatePost (DMap PostKey v) (DMap PostKey Create)
   deriving (Show)
 
 instance HTraversable CreatePost where
