@@ -28,7 +28,8 @@ module Web.WordPress.Types.Post where
 
 import           Data.Aeson            (FromJSON (..), ToJSON (..),
                                         Value (Bool), object, withObject, (.:))
-import           Data.Aeson.Types      (FromJSON1, ToJSON1 (..), parseJSON1, toJSON1)
+import           Data.Aeson.Types      (FromJSON1, ToJSON1 (..), parseJSON1,
+                                        toJSON1)
 import           Data.Dependent.Map    (DMap)
 import           Data.Dependent.Sum    (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
@@ -39,10 +40,8 @@ import           Data.Semigroup        ((<>))
 import           Data.Set              (Set)
 import           Data.Some             (Some (This))
 import           Data.Text             (Text)
-import           Data.Time             (LocalTime, UTCTime)
-import           GHC.Generics          (Generic1)
+import           Data.Time             (LocalTime)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
-import           Text.Show.Deriving    (deriveShow1)
 
 import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
                                         ToJSONViaKey (..), mkParseJSON, symName)
@@ -51,12 +50,12 @@ import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
 -- together and simplify To/FromJSON instances.
 data PostKey a where
   PostDate          :: PostKey LocalTime
-  PostDateGmt       :: PostKey UTCTime
+  PostDateGmt       :: PostKey LocalTime
   PostGuid          :: PostKey (Rendered "guid")
   PostId            :: PostKey Int
   PostLink          :: PostKey Text
   PostModified      :: PostKey LocalTime
-  PostModifiedGmt   :: PostKey UTCTime
+  PostModifiedGmt   :: PostKey LocalTime
   PostSlug          :: PostKey Text
   PostStatus        :: PostKey Status
   PostType          :: PostKey Text
@@ -245,7 +244,6 @@ instance GKey PostKey where
     ]
 
 type PostMap = DMap PostKey Identity
-type CreatePostMap = DMap PostKey Create
 
 type ListPostsMap = DMap ListPostsKey Identity
 
@@ -571,57 +569,55 @@ instance ToJSON Sticky where
     Sticky -> Bool True
     NotSticky -> Bool False
 
--- The JSON representation of values changes depending on the context in which they're being used,
--- so we use this type wrapper around values in dependent maps to get the correct encoding.
-newtype Create a =
-  Create a
-  deriving (Eq, Show, Functor, Generic1)
+data RESTContext =
+    Create
+  | List
+  deriving (Show, Eq)
 
-instance ToJSON1 Create where
-  liftToJSON tj _tjl (Create a) = 
-
-instance Applicative Create where
-  pure = Create
-  Create f <*> Create a = Create (f a)
-
-newtype Rendered (name :: Symbol) =
+data Rendered (name :: Symbol) =
   Rendered
-  { rendered :: Text }
+  { rendered :: Text
+  , context :: RESTContext
+  }
   deriving (Show)
 
 instance KnownSymbol name => FromJSON (Rendered name) where
   parseJSON =
       withObject (symName @name) $ \v ->
-        Rendered <$> v .: "rendered"
+        Rendered <$> v .: "rendered" <*> pure List
 
 instance ToJSON (Rendered name) where
-  toJSON (Rendered t) =
-    object [("rendered", toJSON t)]
+  toJSON (Rendered t ctx) = case ctx of
+    List -> object [("rendered", toJSON t)]
+    Create -> toJSON t
 
-instance ToJSON (Create (Rendered name)) where
-  toJSON (Create (Rendered t)) = toJSON t
+-- instance ToJSON (Rendered name 'Create) where
+--   toJSON (Rendered t) = toJSON t
 
 data RP (name :: Symbol) =
   RP
   { rpRendered  :: Text
   , rpProtected :: Bool
+  , rpContext   :: RESTContext
   }
   deriving (Eq, Show)
 
 instance KnownSymbol name => FromJSON (RP name) where
   parseJSON =
     withObject (symName @name) $ \v ->
-      RP <$> v .: "rendered" <*> v .: "protected"
+      RP <$> v .: "rendered" <*> v .: "protected" <*> pure List
 
 instance ToJSON (RP name) where
-  toJSON RP{..} =
-    object [
-      ("rendered", toJSON rpRendered)
-    , ("protected", toJSON rpProtected)
-    ]
+  toJSON RP{..} = case rpContext of
+    List ->
+      object [
+        ("rendered", toJSON rpRendered)
+      , ("protected", toJSON rpProtected)
+      ]
+    Create -> toJSON rpRendered
 
-instance ToJSON (Create (RP name)) where
-  toJSON (Create (RP t _)) = toJSON t
+-- instance ToJSON (RP name Create) where
+--   toJSON (RP t _) = toJSON t
 
 deriveGEq ''PostKey
 deriveGCompare ''PostKey
@@ -631,4 +627,3 @@ deriveGEq ''ListPostsKey
 deriveGCompare ''ListPostsKey
 deriveGShow ''ListPostsKey
 
-deriveShow1 ''Create

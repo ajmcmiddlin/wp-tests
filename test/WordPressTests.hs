@@ -21,9 +21,10 @@ import           Data.Functor.Identity    (Identity (..))
 import           Data.Map                 (Map)
 import qualified Data.Map                 as M
 import qualified Data.Text                as T
-import           Data.Time                (UTCTime (UTCTime), fromGregorian,
-                                           secondsToDiffTime, utc,
-                                           utcToLocalTime)
+import           Data.Time                (LocalTime (LocalTime), fromGregorian,
+                                           secondsToDiffTime, timeToTimeOfDay,
+                                           utc, utcToLocalTime)
+import           Prelude                  hiding (max, min)
 import           Servant.API              (BasicAuthData (BasicAuthData))
 import           Servant.Client           (runClientM)
 
@@ -41,8 +42,9 @@ import           Test.Tasty               (TestTree, testGroup)
 import           Test.Tasty.Hedgehog      (testProperty)
 
 import           Web.WordPress.API        (createPost, listPosts)
-import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), CreatePostMap,
-                                           RP (RP), Rendered (..))
+import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), PostMap,
+                                           RESTContext (Create), RP (RP),
+                                           Rendered (..))
 
 import           Types                    (Env (..), HasPosts (..),
                                            WPState (WPState))
@@ -115,7 +117,7 @@ cListPosts Env{..} =
 -- CREATE
 --------------------------------------------------------------------------------
 data CreatePost (v :: * -> *) =
-  CreatePost (DMap PostKey v) CreatePostMap
+  CreatePost (DMap PostKey v) PostMap
   deriving (Show)
 
 instance HTraversable CreatePost where
@@ -148,9 +150,10 @@ genRP
   :: MonadGen n
   => Int
   -> Int
+  -> RESTContext
   -> n (RP name)
-genRP min max =
-  RP <$> genAlphaNum min max <*> Gen.bool
+genRP min max ctx =
+  RP <$> genAlphaNum min max <*> Gen.bool <*> pure ctx
 
 genCreate
   :: MonadGen n
@@ -166,11 +169,11 @@ genCreate _s = do
       , PostSlug :=> genAlphaNum 0 30
       , PostStatus :=> Gen.enumBounded
      -- , PostPassword
-      , PostTitle :=> Rendered <$> genAlphaNum 1 30
-      , PostContent :=> RP content <$> Gen.bool
+      , PostTitle :=> Rendered <$> genAlphaNum 1 30 <*> pure Create
+      , PostContent :=> RP content <$> Gen.bool <*> pure Create
       -- TODO: author should come from state. Start state has user with ID = 1.
       , PostAuthor :=> pure 1
-      , PostExcerpt :=> RP excerpt <$> Gen.bool
+      , PostExcerpt :=> RP excerpt <$> Gen.bool <*> pure Create
      -- , PostFeaturedMedia
      -- , PostCommentStatus
      -- , PostPingStatus
@@ -188,7 +191,7 @@ genCreate _s = do
 
 genUTCTime
   :: MonadGen n
-  => n UTCTime
+  => n LocalTime
 genUTCTime =
   let
     gYear = Gen.int (Range.linearFrom 1900 1970 2500)
@@ -198,9 +201,9 @@ genUTCTime =
     hToS = (* 3600)
     gSeconds = Gen.int (Range.linearFrom (hToS 12) 0 86400)
     gUTCTimeDay = fromGregorian . fromIntegral <$> gYear <*> gMonth <*> gDay
-    gDiffTime = secondsToDiffTime . fromIntegral <$> gSeconds
+    gDiffTime = timeToTimeOfDay . secondsToDiffTime . fromIntegral <$> gSeconds
   in
-    UTCTime <$> gUTCTimeDay <*> gDiffTime
+    LocalTime <$> gUTCTimeDay <*> gDiffTime
 
 genAlphaNum
   :: MonadGen n

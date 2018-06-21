@@ -4,7 +4,6 @@ module Types where
 
 import           Control.Lens             (Getter, to)
 import           Data.ByteString          (ByteString)
-import           Data.Dependent.Map       (DMap)
 import           Data.Map                 (Map)
 import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
