@@ -2,9 +2,8 @@
 
 module Types where
 
-import           Control.Lens             (Getter, to)
+import           Control.Lens             (Lens', lens)
 import           Data.ByteString          (ByteString)
-import           Data.Map                 (Map)
 import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
 import           Web.WordPress.Types.Post (PostMap)
@@ -20,7 +19,7 @@ data Env =
   , reset         :: IO ()
   }
 
-type StatePosts v = Map (Var Int v) (Var PostMap v)
+type StatePosts v = [Var PostMap v]
 
 newtype WPState (v :: * -> *) =
   WPState
@@ -28,8 +27,8 @@ newtype WPState (v :: * -> *) =
   }
 
 class HasPosts (s :: (* -> *) -> *) where
-  posts :: Getter (s v) (StatePosts v)
+  posts :: Lens' (s v) (StatePosts v)
 
 instance HasPosts WPState where
-  posts = to _posts
+  posts = lens _posts (const WPState)
 

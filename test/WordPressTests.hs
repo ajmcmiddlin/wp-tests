@@ -4,26 +4,24 @@
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE StandaloneDeriving        #-}
 
 module WordPressTests where
 
-import           Control.Lens             (makeFields, (&), (^.))
+import           Control.Lens             (filtered, (%~), (&), (^..))
 import           Control.Monad.IO.Class   (MonadIO, liftIO)
 import           Data.Aeson               (encode)
 import           Data.Bool                (bool)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
-import           Data.Dependent.Sum       (DSum (..), EqTag)
+import           Data.Dependent.Sum       (DSum (..))
 import           Data.Functor.Classes     (Eq1)
 import           Data.Functor.Identity    (Identity (..))
-import           Data.Map                 (Map)
-import qualified Data.Map                 as M
 import qualified Data.Text                as T
 import           Data.Time                (LocalTime (LocalTime), fromGregorian,
-                                           secondsToDiffTime, timeToTimeOfDay,
-                                           utc, utcToLocalTime)
+                                           secondsToDiffTime, timeToTimeOfDay)
 import           Prelude                  hiding (max, min)
 import           Servant.API              (BasicAuthData (BasicAuthData))
 import           Servant.Client           (runClientM)
@@ -35,7 +33,8 @@ import           Hedgehog                 (Callback (..), Command (Command),
                                            Var (Var), annotateShow, assert,
                                            concrete, evalEither, evalIO,
                                            executeSequential, failure, forAll,
-                                           property, success, (===))
+                                           property, success, withShrinks,
+                                           withTests, (===))
 import qualified Hedgehog.Gen             as Gen
 import qualified Hedgehog.Range           as Range
 import           Test.Tasty               (TestTree, testGroup)
@@ -43,8 +42,8 @@ import           Test.Tasty.Hedgehog      (testProperty)
 
 import           Web.WordPress.API        (createPost, listPosts)
 import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), PostMap,
-                                           RESTContext (Create), RP (RP),
-                                           Rendered (..))
+                                           RESTContext (Create), Renderable,
+                                           Status (..), mkCreatePR, mkCreateR)
 
 import           Types                    (Env (..), HasPosts (..),
                                            WPState (WPState))
@@ -64,9 +63,9 @@ propWordpress env@Env{..} =
   property $ do
   let
     commands = ($ env) <$> [cListPosts, cCreatePost]
-    initialState = WPState M.empty
+    initialState = WPState []
   actions <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState commands
+    Gen.sequential (Range.linear 1 20) initialState commands
 
   evalIO reset
   executeSequential initialState actions
@@ -80,14 +79,19 @@ data ListPosts (v :: * -> *) =
   ListPosts (DMap ListPostsKey v) (DMap ListPostsKey Identity)
   deriving (Show)
 
-instance HTraversable (DMap k) where
-  htraverse f =
-    DM.traverseWithKey (const f)
+htraverseDmap
+  :: (Applicative f)
+  => (forall a. g a -> f (h a))
+  -> DMap k g
+  -> f (DMap k h)
+htraverseDmap f =
+  DM.traverseWithKey (const f)
 
 deriving instance Eq1 v => Eq (ListPosts v)
 
 instance HTraversable ListPosts where
-  htraverse f (ListPosts dmv dmi) = ListPosts <$> htraverse f dmv <*> pure dmi
+  htraverse f (ListPosts dmv dmi) =
+    ListPosts <$> DM.traverseWithKey (const f) dmv <*> pure dmi
 
 cListPosts
   :: ( MonadGen n
@@ -110,7 +114,8 @@ cListPosts Env{..} =
   in
     Command gen exe [
       Ensure $ \so _sn _i ps ->
-        (so ^. posts & length) === length ps
+        let f p = concrete p DM.! PostStatus == Identity Publish
+        in (so ^.. posts . traverse . filtered f & length) === length ps
     ]
 
 --------------------------------------------------------------------------------
@@ -122,7 +127,7 @@ data CreatePost (v :: * -> *) =
 
 instance HTraversable CreatePost where
   htraverse f (CreatePost dmv dmi) =
-    CreatePost <$> htraverse f dmv <*> pure dmi
+    CreatePost <$> htraverseDmap f dmv <*> pure dmi
 
 cCreatePost
   :: ( MonadGen n
@@ -131,7 +136,7 @@ cCreatePost
      , HasPosts state
      )
   => Env
-  -> Command n m state
+  -> Command n m (state :: (* -> *) -> *)
 cCreatePost Env{..} =
   let
     gen = Just . genCreate
@@ -141,19 +146,12 @@ cCreatePost Env{..} =
         dm = DM.union dmi' dmi
         auth = BasicAuthData wpUser wpPassword
       annotateShow $ encode dm
-      evalEither =<< liftIO (runClientM (createPost auth dm) servantClient)
+      r <- evalEither =<< liftIO (runClientM (createPost auth dm) servantClient)
+      pure r
   in
     Command gen exe [
+      Update $ \s _i o -> posts %~ (o :) $ s
     ]
-
-genRP
-  :: MonadGen n
-  => Int
-  -> Int
-  -> RESTContext
-  -> n (RP name)
-genRP min max ctx =
-  RP <$> genAlphaNum min max <*> Gen.bool <*> pure ctx
 
 genCreate
   :: MonadGen n
@@ -169,11 +167,11 @@ genCreate _s = do
       , PostSlug :=> genAlphaNum 0 30
       , PostStatus :=> Gen.enumBounded
      -- , PostPassword
-      , PostTitle :=> Rendered <$> genAlphaNum 1 30 <*> pure Create
-      , PostContent :=> RP content <$> Gen.bool <*> pure Create
+      , PostTitle :=> mkCreateR <$> genAlphaNum 1 30
+      , PostContent :=> pure (mkCreatePR content)
       -- TODO: author should come from state. Start state has user with ID = 1.
       , PostAuthor :=> pure 1
-      , PostExcerpt :=> RP excerpt <$> Gen.bool <*> pure Create
+      , PostExcerpt :=> pure (mkCreatePR excerpt)
      -- , PostFeaturedMedia
      -- , PostCommentStatus
      -- , PostPingStatus
@@ -212,3 +210,6 @@ genAlphaNum
   -> n T.Text
 genAlphaNum min max =
   Gen.text (Range.linear min max) Gen.alphaNum
+
+milliToMicro :: Integer -> Integer
+milliToMicro = (* 1000)

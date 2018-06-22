@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DuplicateRecordFields      #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
@@ -20,17 +21,20 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE UndecidableInstances       #-}
+-- {-# LANGUAGE UndecidableInstances       #-}
 
 {-# OPTIONS_GHC -Wno-unused-matches#-}
 
 module Web.WordPress.Types.Post where
 
+import           Control.Applicative   ((<|>))
 import           Data.Aeson            (FromJSON (..), ToJSON (..),
-                                        Value (Bool), object, withObject, (.:))
+                                        Value (Bool, Object), object,
+                                        withObject, withText, (.:))
 import           Data.Aeson.Types      (FromJSON1, ToJSON1 (..), parseJSON1,
-                                        toJSON1)
+                                        toJSON1, Result (..), parse)
 import           Data.Dependent.Map    (DMap)
+import qualified Data.Dependent.Map as DM
 import           Data.Dependent.Sum    (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
 import           Data.Functor.Identity (Identity)
@@ -41,17 +45,30 @@ import           Data.Set              (Set)
 import           Data.Some             (Some (This))
 import           Data.Text             (Text)
 import           Data.Time             (LocalTime)
+import           GHC.Generics          (Generic)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
 
 import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
                                         ToJSONViaKey (..), mkParseJSON, symName)
+{-
+JSON renderings of types
+------------------------
+R Create: "thing"
+R Created: { "rendered": "<p>thing</p>\n", "raw": "thing" }
+R Get: { "rendered": "<p>thing</p>\n" }
+
+RP Create: "thing"
+RP Created { "rendered": "<p>thing</p>\n", "raw": "thing", "protected": false }
+RP Get { "rendered": "<p>thing</p>\n", "protected": false }
+
+-}
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
 data PostKey a where
   PostDate          :: PostKey LocalTime
   PostDateGmt       :: PostKey LocalTime
-  PostGuid          :: PostKey (Rendered "guid")
+  PostGuid          :: PostKey (R "guid")--(RenderableText "guid" ctx)
   PostId            :: PostKey Int
   PostLink          :: PostKey Text
   PostModified      :: PostKey LocalTime
@@ -60,7 +77,7 @@ data PostKey a where
   PostStatus        :: PostKey Status
   PostType          :: PostKey Text
   PostPassword      :: PostKey Text
-  PostTitle         :: PostKey (Rendered "title")
+  PostTitle         :: PostKey (R "title")
   PostContent       :: PostKey (RP "content")
   PostAuthor        :: PostKey Int
   PostExcerpt       :: PostKey (RP "excerpt")
@@ -569,55 +586,120 @@ instance ToJSON Sticky where
     Sticky -> Bool True
     NotSticky -> Bool False
 
-data RESTContext =
-    Create
-  | List
-  deriving (Show, Eq)
-
-data Rendered (name :: Symbol) =
-  Rendered
-  { rendered :: Text
-  , context :: RESTContext
-  }
-  deriving (Show)
-
-instance KnownSymbol name => FromJSON (Rendered name) where
-  parseJSON =
-      withObject (symName @name) $ \v ->
-        Rendered <$> v .: "rendered" <*> pure List
-
-instance ToJSON (Rendered name) where
-  toJSON (Rendered t ctx) = case ctx of
-    List -> object [("rendered", toJSON t)]
-    Create -> toJSON t
-
--- instance ToJSON (Rendered name 'Create) where
---   toJSON (Rendered t) = toJSON t
-
-data RP (name :: Symbol) =
-  RP
-  { rpRendered  :: Text
-  , rpProtected :: Bool
-  , rpContext   :: RESTContext
-  }
+data Renderable =
+    RCreate Text
+  | RGet { rendered :: Text}
+  | RCreated { rendered :: Text, raw :: Text}
   deriving (Eq, Show)
 
-instance KnownSymbol name => FromJSON (RP name) where
-  parseJSON =
-    withObject (symName @name) $ \v ->
-      RP <$> v .: "rendered" <*> v .: "protected" <*> pure List
+instance ToJSON Renderable where
+  toJSON = \case
+    RCreate t -> toJSON t
+    RGet{..} -> object [("rendered", toJSON rendered)]
+    RCreated{..} -> object [ ("rendered", toJSON rendered)
+                           , ("raw", toJSON raw)
+                           ]
 
-instance ToJSON (RP name) where
-  toJSON RP{..} = case rpContext of
-    List ->
-      object [
-        ("rendered", toJSON rpRendered)
-      , ("protected", toJSON rpProtected)
-      ]
-    Create -> toJSON rpRendered
+-- TODO: reintroduce type level context to avoid trying different parsers?
+instance FromJSON Renderable where
+  -- WARNING order is important here. We need to try parsing both the rendered and raw keys
+  -- before trying only the "rendered" key.
+  parseJSON v =
+        withText "RCreate" (pure . RCreate) v
+    <|> withObject "RCreated" (\o -> RCreated <$> o .: "rendered" <*> o .: "raw") v
+    <|> withObject "RGet" (fmap RGet . (.: "rendered")) v
 
--- instance ToJSON (RP name Create) where
---   toJSON (RP t _) = toJSON t
+data ProtectedRenderable =
+    PRCreate Text
+  | PRGet { rendered :: Text, protected :: Bool }
+  | PRCreated { rendered :: Text, raw :: Text, protected :: Bool }
+  deriving (Eq, Show)
+
+instance ToJSON ProtectedRenderable where
+  toJSON = \case
+    PRCreate t -> toJSON t
+    PRGet{..} -> object [ ("rendered", toJSON rendered)
+                        , ("protected", toJSON protected)
+                        ]
+    PRCreated{..} -> object [ ("rendered", toJSON rendered)
+                            , ("protected", toJSON protected)
+                            , ("raw", toJSON raw)
+                            ]
+
+instance FromJSON ProtectedRenderable where
+  -- WARNING order is important here. We need to try parsing both the rendered and raw keys
+  -- before trying only the "rendered" key.
+  parseJSON v =
+        withText "PRCreate" (pure . PRCreate) v
+    <|> withObject "PRCreated" (\o -> PRCreated <$> o .: "rendered" <*> o .: "raw" <*> o .: "protected") v
+    <|> withObject "PRGet" (\o -> PRGet <$> (o .: "rendered") <*> (o .: "protected")) v
+
+data R (l :: Symbol) where
+  R :: L l Renderable -> R l
+
+deriving instance Show (R l)
+
+instance ToJSON (R l) where
+  toJSON (R l) = toJSON l
+instance KnownSymbol l => FromJSON (R l) where
+  parseJSON = fmap R . parseJSON
+
+data RP (l :: Symbol) where
+  RP :: L l ProtectedRenderable -> RP l
+
+deriving instance Show (RP l)
+
+instance ToJSON (RP l) where
+  toJSON (RP l) = toJSON l
+instance KnownSymbol l => FromJSON (RP l) where
+  parseJSON = fmap RP . parseJSON
+
+data RESTContext =
+    Create
+  | Created
+  | Get
+  deriving (Show, Eq)
+
+data L (l :: Symbol) a where
+  L :: a -> L l a
+  deriving Show
+
+-- TODO: this is wrong -- not always an object
+instance (KnownSymbol l, FromJSON a) => FromJSON (L l a) where
+  parseJSON v =
+    case parse parseJSON v of
+      Error s -> fail $ "While parsing '" <> symName @l <> "': " <> s
+      Success a -> pure (L a)
+
+instance ToJSON a => ToJSON (L l a) where
+  toJSON (L a) = toJSON a
+
+mkCreateR
+  :: Text
+  -> R l
+mkCreateR t =
+  R (L (RCreate t))
+
+mkCreatePR
+  :: Text
+  -> RP l
+mkCreatePR t =
+  RP (L (PRCreate t))
+
+-- mkGetRenderable
+--   :: Text
+--   -> Bool
+--   -> Renderable l
+-- mkGetRenderable t b =
+--   L (GetCtx (RenderedGet (RGet t b)))
+
+-- mkCreatedRenderable
+--   :: Text
+--   -> Bool
+--   -> Text
+--   -> Renderable l
+-- mkCreatedRenderable t b raw =
+--   L (CreatedCtx (RenderedCreated (RCreated t b raw)))
 
 deriveGEq ''PostKey
 deriveGCompare ''PostKey
