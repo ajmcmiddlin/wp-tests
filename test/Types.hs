@@ -4,9 +4,10 @@ module Types where
 
 import           Control.Lens             (Lens', lens)
 import           Data.ByteString          (ByteString)
+import           Data.Dependent.Map       (DMap)
 import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
-import           Web.WordPress.Types.Post (PostMap)
+import           Web.WordPress.Types.Post (PostKey, PostMap)
 
 import           Hedgehog                 (Var)
 

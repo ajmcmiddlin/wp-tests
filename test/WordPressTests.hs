@@ -10,14 +10,17 @@
 
 module WordPressTests where
 
-import           Control.Lens             (filtered, (%~), (&), (^..))
+import           Control.Lens             (filtered, (%~), (&), (^.), (^..))
 import           Control.Monad.IO.Class   (MonadIO, liftIO)
 import           Data.Aeson               (encode)
 import           Data.Bool                (bool)
+import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
 import           Data.Dependent.Sum       (DSum (..))
+import           Data.Functor             (void)
 import           Data.Functor.Classes     (Eq1)
+import           Data.Functor.Const       (Const (..))
 import           Data.Functor.Identity    (Identity (..))
 import qualified Data.Text                as T
 import           Data.Time                (LocalTime (LocalTime), fromGregorian,
@@ -40,10 +43,10 @@ import qualified Hedgehog.Range           as Range
 import           Test.Tasty               (TestTree, testGroup)
 import           Test.Tasty.Hedgehog      (testProperty)
 
-import           Web.WordPress.API        (createPost, listPosts)
+import           Web.WordPress.API        (createPost, getPost, listPosts)
 import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), PostMap,
                                            RESTContext (Create), Renderable,
-                                           Status (..), mkCreatePR, mkCreateR)
+                                           Status (..), mkCreatePR, mkCreateR, EqViaKey (..))
 
 import           Types                    (Env (..), HasPosts (..),
                                            WPState (WPState))
@@ -62,7 +65,7 @@ propWordpress
 propWordpress env@Env{..} =
   property $ do
   let
-    commands = ($ env) <$> [cListPosts, cCreatePost]
+    commands = ($ env) <$> [cListPosts, cCreatePost, cGetPost]
     initialState = WPState []
   actions <- forAll $
     Gen.sequential (Range.linear 1 20) initialState commands
@@ -91,7 +94,7 @@ deriving instance Eq1 v => Eq (ListPosts v)
 
 instance HTraversable ListPosts where
   htraverse f (ListPosts dmv dmi) =
-    ListPosts <$> DM.traverseWithKey (const f) dmv <*> pure dmi
+    ListPosts <$> htraverseDmap f dmv <*> pure dmi
 
 cListPosts
   :: ( MonadGen n
@@ -118,6 +121,46 @@ cListPosts Env{..} =
         in (so ^.. posts . traverse . filtered f & length) === length ps
     ]
 
+
+--------------------------------------------------------------------------------
+-- GET
+--------------------------------------------------------------------------------
+newtype GetPost (v :: * -> *) =
+  GetPost (Var PostMap v)
+  deriving (Show)
+
+instance HTraversable GetPost where
+  htraverse f (GetPost v)=
+    GetPost <$> htraverse f v
+
+cGetPost
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     , HasPosts state
+     )
+  => Env
+  -> Command n m state
+cGetPost env@Env{..} =
+  let
+    gen s =
+      if s ^. posts & (not . null)
+      then Just $ GetPost <$> (s ^. posts & Gen.element)
+      else Nothing
+    exe (GetPost v) =
+      let postId = runIdentity $ concrete v DM.! PostId
+       in evalEither =<< liftIO (runClientM (getPost (auth env) postId) servantClient)
+  in
+    Command gen exe [
+      Ensure $ \_so _sn (GetPost v) p -> do
+        let
+          ps = concrete v
+        annotateShow ps
+        annotateShow p
+        void $ DM.traverseWithKey (\kv fv -> Const <$> assert (eqViaKey kv fv (ps DM.! kv))) p
+    ]
+
+
 --------------------------------------------------------------------------------
 -- CREATE
 --------------------------------------------------------------------------------
@@ -137,16 +180,15 @@ cCreatePost
      )
   => Env
   -> Command n m (state :: (* -> *) -> *)
-cCreatePost Env{..} =
+cCreatePost env@Env{..} =
   let
     gen = Just . genCreate
     exe (CreatePost dmv dmi) = do
       let
         dmi' = DM.map (\(Concrete a) -> pure a) dmv
         dm = DM.union dmi' dmi
-        auth = BasicAuthData wpUser wpPassword
       annotateShow $ encode dm
-      r <- evalEither =<< liftIO (runClientM (createPost auth dm) servantClient)
+      r <- evalEither =<< liftIO (runClientM (createPost (auth env) dm) servantClient)
       pure r
   in
     Command gen exe [
@@ -213,3 +255,9 @@ genAlphaNum min max =
 
 milliToMicro :: Integer -> Integer
 milliToMicro = (* 1000)
+
+auth
+  :: Env
+  -> BasicAuthData
+auth Env{..} =
+  BasicAuthData wpUser wpPassword

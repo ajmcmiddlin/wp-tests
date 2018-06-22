@@ -31,10 +31,10 @@ import           Control.Applicative   ((<|>))
 import           Data.Aeson            (FromJSON (..), ToJSON (..),
                                         Value (Bool, Object), object,
                                         withObject, withText, (.:))
-import           Data.Aeson.Types      (FromJSON1, ToJSON1 (..), parseJSON1,
-                                        toJSON1, Result (..), parse)
+import           Data.Aeson.Types      (FromJSON1, Result (..), ToJSON1 (..),
+                                        parse, parseJSON1, toJSON1)
 import           Data.Dependent.Map    (DMap)
-import qualified Data.Dependent.Map as DM
+import qualified Data.Dependent.Map    as DM
 import           Data.Dependent.Sum    (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
 import           Data.Functor.Identity (Identity)
@@ -94,6 +94,35 @@ data PostKey a where
 deriving instance Show (PostKey a)
 deriving instance Eq (PostKey a)
 deriving instance Ord (PostKey a)
+
+class EqViaKey k f where
+  eqViaKey :: k a -> f a -> f a -> Bool
+
+instance Eq1 f => EqViaKey PostKey f where
+  eqViaKey PostDate          = eq1
+  eqViaKey PostDateGmt       = eq1
+  eqViaKey PostGuid          = eq1
+  eqViaKey PostId            = eq1
+  eqViaKey PostLink          = eq1
+  eqViaKey PostModified      = eq1
+  eqViaKey PostModifiedGmt   = eq1
+  eqViaKey PostSlug          = eq1
+  eqViaKey PostStatus        = eq1
+  eqViaKey PostType          = eq1
+  eqViaKey PostPassword      = eq1
+  eqViaKey PostTitle         = eq1
+  eqViaKey PostContent       = eq1
+  eqViaKey PostAuthor        = eq1
+  eqViaKey PostExcerpt       = eq1
+  eqViaKey PostFeaturedMedia = eq1
+  eqViaKey PostCommentStatus = eq1
+  eqViaKey PostPingStatus    = eq1
+  eqViaKey PostFormat        = eq1
+  eqViaKey PostMeta          = eq1
+  eqViaKey PostSticky        = eq1
+  eqViaKey PostTemplate      = eq1
+  eqViaKey PostCategories    = eq1
+  eqViaKey PostTags          = eq1
 
 -- TODO: use TH to get rid of this
 instance FromJSON1 f => FromJSONViaKey PostKey f where
@@ -473,7 +502,7 @@ instance FromJSON Status where
 data CommentStatus =
     CommentsOpen
   | CommentsClosed
-  deriving Show
+  deriving (Eq, Show)
 
 instance ToJSON CommentStatus where
   toJSON = \case
@@ -489,7 +518,7 @@ instance FromJSON CommentStatus where
 data PingStatus =
     PingsOpen
   | PingsClosed
-  deriving Show
+  deriving (Eq, Show)
 
 instance ToJSON PingStatus where
   toJSON = \case
@@ -638,6 +667,7 @@ data R (l :: Symbol) where
   R :: L l Renderable -> R l
 
 deriving instance Show (R l)
+deriving instance Eq (R l)
 
 instance ToJSON (R l) where
   toJSON (R l) = toJSON l
@@ -648,6 +678,7 @@ data RP (l :: Symbol) where
   RP :: L l ProtectedRenderable -> RP l
 
 deriving instance Show (RP l)
+deriving instance Eq (RP l)
 
 instance ToJSON (RP l) where
   toJSON (RP l) = toJSON l
@@ -662,13 +693,13 @@ data RESTContext =
 
 data L (l :: Symbol) a where
   L :: a -> L l a
-  deriving Show
+  deriving (Eq, Show)
 
 -- TODO: this is wrong -- not always an object
 instance (KnownSymbol l, FromJSON a) => FromJSON (L l a) where
   parseJSON v =
     case parse parseJSON v of
-      Error s -> fail $ "While parsing '" <> symName @l <> "': " <> s
+      Error s   -> fail $ "While parsing '" <> symName @l <> "': " <> s
       Success a -> pure (L a)
 
 instance ToJSON a => ToJSON (L l a) where
