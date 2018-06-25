@@ -28,6 +28,7 @@
 module Web.WordPress.Types.Post where
 
 import           Control.Applicative   ((<|>))
+import           Control.Lens          (Getter, to, (^.))
 import           Data.Aeson            (FromJSON (..), ToJSON (..),
                                         Value (Bool, Object), object,
                                         withObject, withText, (.:))
@@ -50,18 +51,6 @@ import           GHC.TypeLits          (KnownSymbol, Symbol)
 
 import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
                                         ToJSONViaKey (..), mkParseJSON, symName)
-{-
-JSON renderings of types
-------------------------
-R Create: "thing"
-R Created: { "rendered": "<p>thing</p>\n", "raw": "thing" }
-R Get: { "rendered": "<p>thing</p>\n" }
-
-RP Create: "thing"
-RP Created { "rendered": "<p>thing</p>\n", "raw": "thing", "protected": false }
-RP Get { "rendered": "<p>thing</p>\n", "protected": false }
-
--}
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
@@ -617,15 +606,38 @@ instance ToJSON Sticky where
 
 data Renderable =
     RCreate Text
-  | RGet { rendered :: Text}
-  | RCreated { rendered :: Text, raw :: Text}
-  deriving (Eq, Show)
+  | RGet { _rendered :: Text}
+  | RCreated { _rendered :: Text, raw :: Text}
+  deriving (Show)
+
+class HasRendered r where
+  rendered :: Getter r Text
+
+-- | Our notion of equality for renderable things is that their renderings are equal, and nothing
+-- else matters. This allows us to make comparisons regardless of the contexts in which a renderable
+-- was created.
+renderedEq
+  :: HasRendered r
+  => r
+  -> r
+  -> Bool
+renderedEq r r' =
+  r ^. rendered == r' ^. rendered
+
+instance HasRendered Renderable where
+  rendered = to $ \case
+    RCreate t -> t
+    RGet t -> t
+    RCreated t _ -> t
+
+instance Eq Renderable where
+  (==) = renderedEq
 
 instance ToJSON Renderable where
   toJSON = \case
     RCreate t -> toJSON t
-    RGet{..} -> object [("rendered", toJSON rendered)]
-    RCreated{..} -> object [ ("rendered", toJSON rendered)
+    RGet{..} -> object [("rendered", toJSON _rendered)]
+    RCreated{..} -> object [ ("rendered", toJSON _rendered)
                            , ("raw", toJSON raw)
                            ]
 
@@ -640,19 +652,28 @@ instance FromJSON Renderable where
 
 data ProtectedRenderable =
     PRCreate Text
-  | PRGet { rendered :: Text, protected :: Bool }
-  | PRCreated { rendered :: Text, raw :: Text, protected :: Bool }
-  deriving (Eq, Show)
+  | PRGet { _rendered :: Text, _protected :: Bool }
+  | PRCreated { _rendered :: Text, _raw :: Text, _protected :: Bool }
+  deriving (Show)
+
+instance HasRendered ProtectedRenderable where
+  rendered = to $ \case
+    PRCreate t -> t
+    PRGet t _ -> t
+    PRCreated t _ _ -> t
+
+instance Eq ProtectedRenderable where
+  (==) = renderedEq
 
 instance ToJSON ProtectedRenderable where
   toJSON = \case
     PRCreate t -> toJSON t
-    PRGet{..} -> object [ ("rendered", toJSON rendered)
-                        , ("protected", toJSON protected)
+    PRGet{..} -> object [ ("rendered", toJSON _rendered)
+                        , ("protected", toJSON _protected)
                         ]
-    PRCreated{..} -> object [ ("rendered", toJSON rendered)
-                            , ("protected", toJSON protected)
-                            , ("raw", toJSON raw)
+    PRCreated{..} -> object [ ("rendered", toJSON _rendered)
+                            , ("protected", toJSON _protected)
+                            , ("raw", toJSON _raw)
                             ]
 
 instance FromJSON ProtectedRenderable where

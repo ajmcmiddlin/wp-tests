@@ -10,8 +10,8 @@ mkDerivation {
   src = ./.;
   libraryHaskellDepends = [
     aeson base containers dependent-map dependent-sum
-    dependent-sum-template deriving-compat ghc-prim http-media servant
-    servant-client text time unordered-containers
+    dependent-sum-template deriving-compat ghc-prim http-media lens
+    servant servant-client text time unordered-containers
   ];
   testHaskellDepends = [
     aeson base bytestring containers dependent-map dependent-sum
