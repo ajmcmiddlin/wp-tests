@@ -14,7 +14,7 @@ import           Web.WordPress.YoloContent (YoloJSON)
 
 type Posts =
   "posts" :>
-  (    ReqBody '[JSON] ListPostsMap :> Get '[JSON, YoloJSON] [PostMap]
+  (    QueryParams "listPostParams" ListPostsMap :> Get '[JSON, YoloJSON] [PostMap]
   :<|> BasicAuth "wordpress" () :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
   :<|> BasicAuth "wordpress" () :> Capture "id" Int :> Get '[JSON] PostMap
   )
