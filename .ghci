@@ -4,6 +4,9 @@ let loadTests _ =
         ":set -isrc"
       , ":set -itest"
       , ":l test/Test.hs"
+      , "import Hedgehog"
+      , "import WordPressTests"
+      , "env <- mkEnv"
       ]
 :}
 
