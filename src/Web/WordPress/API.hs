@@ -6,7 +6,7 @@ module Web.WordPress.API where
 import           Data.Proxy                (Proxy (Proxy))
 import           Servant.API               ((:<|>) ((:<|>)), (:>), BasicAuth,
                                             BasicAuthData, Get, JSON, Post,
-                                            ReqBody, Capture)
+                                            ReqBody, Capture, QueryParams)
 import           Servant.Client            (ClientM, client)
 
 import           Web.WordPress.Types.Post  (ListPostsMap, PostMap)
