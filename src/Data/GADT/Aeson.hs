@@ -59,10 +59,10 @@ data FooKey (s :: Symbol) a where
   I :: FooKey "i" Int
 
 instance KnownSymbol s => GKey (FooKey s) where
-  toFieldName (ka :: FooKey s a) = pack (symName @s)
+  toFieldName (_ :: FooKey s a) = pack (symName @s)
   keys = undefined
 
-  fromFieldName :: KnownSymbol s => Text -> Maybe (Some (FooKey s))
+  fromFieldName :: Text -> Maybe (Some (FooKey s))
   fromFieldName = defaultFromFieldName
 
 instance GEq (FooKey s) where
@@ -90,8 +90,13 @@ instance GCompare (L FooKey) where
 data BarKey a where
   S :: BarKey Int
 
-instance (GKey k, ToJSONViaKey k f) => ToJSON (DMap k f) where
-  toJSON dm =
+toJSONDMap ::
+  ( GKey k
+  , ToJSONViaKey k f
+  )
+  => DMap k f
+  -> Value
+toJSONDMap dm =
     let
       toPair (k :=> v) = (toFieldName k, toJSONViaKey k v)
     in
@@ -101,7 +106,7 @@ instance (GKey k, ToJSONViaKey k f) => ToJSON (DMap k f) where
 -- a name for the object can be provided, which gives better error messages.
 mkParseJSON
   :: forall k f.
-    (GKey k, GCompare k, Applicative f, FromJSONViaKey k f)
+    (GKey k, GCompare k, FromJSONViaKey k f)
   => String
   -> Value
   -> Parser (DMap k f)
