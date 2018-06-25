@@ -3,14 +3,16 @@
 
 module Web.WordPress.API where
 
-import           Data.Proxy                (Proxy (Proxy))
-import           Servant.API               ((:<|>) ((:<|>)), (:>), BasicAuth,
-                                            BasicAuthData, Get, JSON, Post,
-                                            ReqBody, Capture, QueryParams)
-import           Servant.Client            (ClientM, client)
+import           Data.Proxy                       (Proxy (Proxy))
+import           Servant.API                      ((:<|>) ((:<|>)), (:>),
+                                                   BasicAuth, BasicAuthData,
+                                                   Capture, Get, JSON, Post,
+                                                   QueryParams, ReqBody)
+import           Servant.Client                   (ClientM, client)
 
-import           Web.WordPress.Types.Post  (ListPostsMap, PostMap)
-import           Web.WordPress.YoloContent (YoloJSON)
+import           Web.WordPress.Types.ListPosts (ListPostsMap)
+import           Web.WordPress.Types.Post         (PostMap)
+import           Web.WordPress.YoloContent        (YoloJSON)
 
 type Posts =
   "posts" :>

@@ -45,7 +45,15 @@ class GKey k where
   -- | This is not optimal as it does a linear search through 'keys' to find the first matching field.
   fromFieldName = defaultFromFieldName
 
-defaultFromFieldName t = getFirst $ foldMap (\(This k) -> First $ bool Nothing (Just (This k)) (toFieldName k == t)) keys
+defaultFromFieldName
+  :: GKey tag
+  => Text
+  -> Maybe (Some tag)
+defaultFromFieldName t =
+  getFirst $ foldMap (\(This k) -> First $ bool Nothing (Just (This k)) (toFieldName k == t)) keys
+
+class EqViaKey k f where
+  eqViaKey :: k a -> f a -> f a -> Bool
 
 data FooKey (s :: Symbol) a where
   I :: FooKey "i" Int
