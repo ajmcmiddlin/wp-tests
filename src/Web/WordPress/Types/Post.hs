@@ -716,7 +716,6 @@ data L (l :: Symbol) a where
   L :: a -> L l a
   deriving (Eq, Show)
 
--- TODO: this is wrong -- not always an object
 instance (KnownSymbol l, FromJSON a) => FromJSON (L l a) where
   parseJSON v =
     case parse parseJSON v of

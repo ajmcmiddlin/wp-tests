@@ -10,14 +10,14 @@
 
 module WordPressTests where
 
-import           Control.Lens             (filtered, (%~), (&), (^.), (^..))
+import           Control.Lens             (filtered, (%~), (&), (^.), (^..), to)
 import           Control.Monad.IO.Class   (MonadIO, liftIO)
 import           Data.Aeson               (encode)
 import           Data.Bool                (bool)
 import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
-import           Data.Dependent.Sum       (DSum (..))
+import           Data.Dependent.Sum       (DSum (..), (==>))
 import           Data.Functor             (void)
 import           Data.Functor.Classes     (Eq1)
 import           Data.Functor.Const       (Const (..))
@@ -25,38 +25,39 @@ import           Data.Functor.Identity    (Identity (..))
 import qualified Data.Text                as T
 import           Data.Time                (LocalTime (LocalTime), fromGregorian,
                                            secondsToDiffTime, timeToTimeOfDay)
-import           Prelude                  hiding (max, min)
 import           Servant.API              (BasicAuthData (BasicAuthData))
 import           Servant.Client           (runClientM)
 
-import           Hedgehog                 (Callback (..), Command (Command),
+import           Hedgehog                 (Callback (..), Command (Command), eval,
                                            Concrete (Concrete),
                                            HTraversable (htraverse), MonadGen,
                                            MonadTest, Property, Symbolic,
                                            Var (Var), annotateShow, assert,
                                            concrete, evalEither, evalIO,
-                                           executeSequential, failure, forAll,
-                                           property, success, withShrinks,
-                                           withTests, (===))
+                                           executeParallel, executeSequential,
+                                           failure, forAll, property, success,
+                                           test, withShrinks, withTests, (===), withRetries)
 import qualified Hedgehog.Gen             as Gen
 import qualified Hedgehog.Range           as Range
 import           Test.Tasty               (TestTree, testGroup)
 import           Test.Tasty.Hedgehog      (testProperty)
 
 import           Web.WordPress.API        (createPost, getPost, listPosts)
-import           Web.WordPress.Types.Post (ListPostsKey, PostKey (..), PostMap,
+import           Web.WordPress.Types.Post (EqViaKey (..), ListPostsKey (..),
+                                           PostKey (..), PostMap,
                                            RESTContext (Create), Renderable,
-                                           Status (..), mkCreatePR, mkCreateR, EqViaKey (..))
+                                           Status (..), mkCreatePR, mkCreateR)
 
-import           Types                    (Env (..), HasPosts (..),
-                                           WPState (WPState))
+import           Types                    (Env (..), HasPosts (..), StatePost (..), HasIdentityPosts (..),
+                                           WPState (WPState), smooshStatePost, StatePosts (..))
 
 wordpressTests
   :: Env
   -> TestTree
 wordpressTests env =
   testGroup "wordpress" [
-    testProperty "sequential" $ propWordpress env
+    testProperty "sequential" . withTests 10 $ propWordpress env
+  , testProperty "parallel" $ propWordpressParallel env
   ]
 
 propWordpress
@@ -66,12 +67,27 @@ propWordpress env@Env{..} =
   property $ do
   let
     commands = ($ env) <$> [cListPosts, cCreatePost, cGetPost]
-    initialState = WPState []
+    initialState = WPState . StatePosts $ []
   actions <- forAll $
-    Gen.sequential (Range.linear 1 20) initialState commands
+    Gen.sequential (Range.linear 1 100) initialState commands
 
   evalIO reset
   executeSequential initialState actions
+
+propWordpressParallel
+  :: Env
+  -> Property
+propWordpressParallel env@Env{..} =
+  withRetries 10 . property $ do
+  let
+    commands = ($ env) <$> [cListPosts, cCreatePost, cGetPost]
+    initialState = WPState . StatePosts $ []
+  actions <- forAll $
+    Gen.parallel (Range.linear 1 200) (Range.linear 1 50) initialState commands
+
+  test $ do
+    evalIO reset
+    executeParallel initialState actions
 
 
 --------------------------------------------------------------------------------
@@ -101,13 +117,13 @@ cListPosts
      , MonadIO m
      , MonadTest m
      , HasPosts state
+     , HasIdentityPosts state
      )
   => Env
   -> Command n m state
 cListPosts Env{..} =
   let
-    gen _ =
-      Just . pure $ ListPosts DM.empty DM.empty
+    gen = Just . genList
     exe (ListPosts dmv dmi) =
       let
         dmi' = DM.map (\(Concrete a) -> pure a) dmv
@@ -117,16 +133,50 @@ cListPosts Env{..} =
   in
     Command gen exe [
       Ensure $ \so _sn _i ps ->
-        let f p = concrete p DM.! PostStatus == Identity Publish
-        in (so ^.. posts . traverse . filtered f & length) === length ps
+        length (postsWithStatus so Publish) === length ps
     ]
+
+genList
+  :: ( MonadGen n
+     , HasIdentityPosts state
+     )
+  => state Symbolic
+  -> n (ListPosts v)
+genList s = do
+  status <- Gen.enumBounded
+  perPage <- Gen.int (Range.linear 1 100)
+  let
+    numPosts = length $ postsWithStatus s status
+    numPages = min 1 . (\(d,m) -> d + min m 1) $ numPosts `divMod` perPage
+  page <- Gen.int (Range.linear 1 numPages)
+  pure . ListPosts DM.empty $ DM.fromList [
+      ListPostsStatus ==> status
+    , ListPostsPerPage ==> perPage
+    , ListPostsPage ==> page
+    ]
+
+postsWhere
+  :: HasIdentityPosts state
+  => state v
+  -> (PostMap -> Bool)
+  -> [PostMap]
+postsWhere s p =
+  s ^.. identityPosts . traverse . filtered p
+
+postsWithStatus
+  :: HasIdentityPosts state
+  => state v
+  -> Status
+  -> [PostMap]
+postsWithStatus s status =
+  postsWhere s ((== Identity status) . (DM.! PostStatus))
 
 
 --------------------------------------------------------------------------------
 -- GET
 --------------------------------------------------------------------------------
 newtype GetPost (v :: * -> *) =
-  GetPost (Var PostMap v)
+  GetPost (StatePost v)
   deriving (Show)
 
 instance HTraversable GetPost where
@@ -147,17 +197,21 @@ cGetPost env@Env{..} =
       if s ^. posts & (not . null)
       then Just $ GetPost <$> (s ^. posts & Gen.element)
       else Nothing
-    exe (GetPost v) =
-      let postId = runIdentity $ concrete v DM.! PostId
-       in evalEither =<< liftIO (runClientM (getPost (auth env) postId) servantClient)
+    exe (GetPost (StatePost _ dmv)) = do
+      postId <- eval . runIdentity $ concrete dmv DM.! PostId
+      evalEither =<< liftIO (runClientM (getPost (auth env) postId) servantClient)
   in
     Command gen exe [
-      Ensure $ \_so _sn (GetPost v) p -> do
+      Ensure $ \_so _sn (GetPost sp) p -> do
         let
-          ps = concrete v
-        annotateShow ps
+          pState = smooshStatePost sp
+
+          eqVals :: PostKey a -> Identity a -> Bool
+          eqVals kv fv = eqViaKey kv fv (pState DM.! kv)
+
+        annotateShow pState
         annotateShow p
-        void $ DM.traverseWithKey (\kv fv -> Const <$> assert (eqViaKey kv fv (ps DM.! kv))) p
+        void $ DM.traverseWithKey (\kv fv -> Const <$> assert (eqVals kv fv)) p
     ]
 
 
@@ -192,7 +246,8 @@ cCreatePost env@Env{..} =
       pure r
   in
     Command gen exe [
-      Update $ \s _i o -> posts %~ (o :) $ s
+      Update $ \s (CreatePost dmv dmi) o ->
+          posts %~ (StatePost dmi o :) $ s
     ]
 
 genCreate
@@ -250,8 +305,8 @@ genAlphaNum
   => Int
   -> Int
   -> n T.Text
-genAlphaNum min max =
-  Gen.text (Range.linear min max) Gen.alphaNum
+genAlphaNum min' max' =
+  Gen.text (Range.linear min' max') Gen.alphaNum
 
 milliToMicro :: Integer -> Integer
 milliToMicro = (* 1000)

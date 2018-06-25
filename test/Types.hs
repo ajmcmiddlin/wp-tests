@@ -1,15 +1,19 @@
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Types where
 
-import           Control.Lens             (Lens', lens)
+import           Control.Lens             (Lens', lens, Getter, to)
 import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
+import qualified Data.Dependent.Map       as DM
 import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
 import           Web.WordPress.Types.Post (PostKey, PostMap)
 
-import           Hedgehog                 (Var)
+import           Hedgehog                 (Concrete (..), HTraversable (..),
+                                           Var, concrete)
 
 data Env =
   Env
@@ -20,16 +24,66 @@ data Env =
   , reset         :: IO ()
   }
 
-type StatePosts v = [Var PostMap v]
+class HasStatePosts s where
+  statePosts :: Lens' (s v) (StatePosts v)
+
+class HasPosts s where
+  posts :: Lens' (s v) [StatePost v]
+
+class HasIdentityPosts (s :: (* -> *) -> *) where
+  identityPosts :: Getter (s v) [PostMap]
+
+class HasVarPosts (s :: (* -> *) -> *) where
+  varPosts :: Getter (s v) [Var PostMap v]
+
 
 newtype WPState (v :: * -> *) =
   WPState
   { _posts :: StatePosts v
   }
 
-class HasPosts (s :: (* -> *) -> *) where
-  posts :: Lens' (s v) (StatePosts v)
+instance HasStatePosts WPState where
+  statePosts = lens _posts (const WPState)
 
 instance HasPosts WPState where
-  posts = lens _posts (const WPState)
+  posts = statePosts . posts
 
+instance HasIdentityPosts WPState where
+  identityPosts = statePosts . identityPosts
+
+instance HasVarPosts WPState where
+  varPosts = statePosts . varPosts
+
+
+newtype StatePosts v =
+  StatePosts {getStatePosts :: [StatePost v]}
+
+instance HasPosts StatePosts where
+  posts = lens getStatePosts (const StatePosts)
+
+instance HasIdentityPosts StatePosts where
+  identityPosts = to $ \(StatePosts sps) ->
+    fmap (\(StatePost dmi _) -> dmi) sps
+
+instance HasVarPosts StatePosts where
+  varPosts = posts . to (fmap (\(StatePost _ dmv) -> dmv))
+
+
+data StatePost v =
+  StatePost PostMap (Var PostMap v)
+  deriving (Show)
+
+instance HTraversable StatePost where
+  htraverse f (StatePost dmi dmv) =
+    StatePost dmi <$> htraverse f dmv
+
+smooshStatePost
+  :: StatePost Concrete
+  -> PostMap
+smooshStatePost (StatePost dmi dmc) =
+  DM.union dmi (concrete dmc)
+
+-- This looked like it was hanging, but might have been shrinking:
+-- NOTE: upped the size from 54, as it failed on 55th test
+-- recheck (Size 100) (Seed 2581475982454513726 (-5481735485570210791)) propWordpressParallel
+-- recheck (Size 55) (Seed 3363758708465963961 (-434715610133022345)) <property>
