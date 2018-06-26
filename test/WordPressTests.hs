@@ -10,46 +10,58 @@
 
 module WordPressTests where
 
-import           Control.Lens             (filtered, (%~), (&), (^.), (^..), to)
-import           Control.Monad.IO.Class   (MonadIO, liftIO)
-import           Data.Aeson               (encode)
-import           Data.Bool                (bool)
-import           Data.ByteString          (ByteString)
-import           Data.Dependent.Map       (DMap)
-import qualified Data.Dependent.Map       as DM
-import           Data.Dependent.Sum       (DSum (..), (==>))
-import           Data.Functor             (void)
-import           Data.Functor.Classes     (Eq1)
-import           Data.Functor.Const       (Const (..))
-import           Data.Functor.Identity    (Identity (..))
-import qualified Data.Text                as T
-import           Data.Time                (LocalTime (LocalTime), fromGregorian,
-                                           secondsToDiffTime, timeToTimeOfDay)
-import           Servant.API              (BasicAuthData (BasicAuthData))
-import           Servant.Client           (runClientM)
+import           Control.Lens                  (filtered, to, (%~), (&), (^.),
+                                                (^..))
+import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import           Data.Aeson                    (encode)
+import           Data.Bool                     (bool)
+import           Data.ByteString               (ByteString)
+import           Data.Dependent.Map            (DMap)
+import qualified Data.Dependent.Map            as DM
+import           Data.Dependent.Sum            (DSum (..), (==>))
+import           Data.Functor                  (void)
+import           Data.Functor.Classes          (Eq1)
+import           Data.Functor.Const            (Const (..))
+import           Data.Functor.Identity         (Identity (..))
+import qualified Data.Text                     as T
+import           Data.Time                     (LocalTime (LocalTime),
+                                                fromGregorian,
+                                                secondsToDiffTime,
+                                                timeToTimeOfDay)
+import           Servant.API                   (BasicAuthData (BasicAuthData))
+import           Servant.Client                (runClientM)
 
-import           Hedgehog                 (Callback (..), Command (Command), eval,
-                                           Concrete (Concrete),
-                                           HTraversable (htraverse), MonadGen,
-                                           MonadTest, Property, Symbolic,
-                                           Var (Var), annotateShow, assert,
-                                           concrete, evalEither, evalIO,
-                                           executeParallel, executeSequential,
-                                           failure, forAll, property, success,
-                                           test, withShrinks, withTests, (===), withRetries)
-import qualified Hedgehog.Gen             as Gen
-import qualified Hedgehog.Range           as Range
-import           Test.Tasty               (TestTree, testGroup)
-import           Test.Tasty.Hedgehog      (testProperty)
+import           Hedgehog                      (Callback (..),
+                                                Command (Command),
+                                                Concrete (Concrete),
+                                                HTraversable (htraverse),
+                                                MonadGen, MonadTest, Property,
+                                                Symbolic, Var (Var),
+                                                annotateShow, assert, concrete,
+                                                eval, evalEither, evalIO,
+                                                executeParallel,
+                                                executeSequential, failure,
+                                                forAll, property, success, test,
+                                                withRetries, withShrinks,
+                                                withTests, (===))
+import qualified Hedgehog.Gen                  as Gen
+import qualified Hedgehog.Range                as Range
+import           Test.Tasty                    (TestTree, testGroup)
+import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Web.WordPress.API        (createPost, getPost, listPosts)
-import           Web.WordPress.Types.Post (EqViaKey (..), ListPostsKey (..),
-                                           PostKey (..), PostMap,
-                                           RESTContext (Create), Renderable,
-                                           Status (..), mkCreatePR, mkCreateR)
+import           Data.GADT.Aeson               (EqViaKey (..))
+import           Web.WordPress.API             (createPost, getPost, listPosts)
+import           Web.WordPress.Types.ListPosts (ListPostsKey (..))
+import           Web.WordPress.Types.Post      (PostKey (..), PostMap,
+                                                RESTContext (Create),
+                                                Renderable, Status (..),
+                                                mkCreatePR, mkCreateR)
 
-import           Types                    (Env (..), HasPosts (..), StatePost (..), HasIdentityPosts (..),
-                                           WPState (WPState), smooshStatePost, StatePosts (..))
+import           Types                         (Env (..), HasIdentityPosts (..),
+                                                HasPosts (..), StatePost (..),
+                                                StatePosts (..),
+                                                WPState (WPState),
+                                                smooshStatePost)
 
 wordpressTests
   :: Env

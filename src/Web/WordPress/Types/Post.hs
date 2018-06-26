@@ -1,20 +1,20 @@
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE DuplicateRecordFields      #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE KindSignatures             #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PolyKinds                  #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeApplications      #-}
 
 {-# OPTIONS_GHC -Wno-unused-matches#-}
 
@@ -23,8 +23,8 @@ module Web.WordPress.Types.Post where
 import           Control.Applicative   ((<|>))
 import           Control.Lens          (Getter, to, (^.))
 import           Data.Aeson            (FromJSON (..), ToJSON (..),
-                                        Value (Bool), object,
-                                        withObject, withText, (.:))
+                                        Value (Bool), object, withObject,
+                                        withText, (.:))
 import           Data.Aeson.Types      (FromJSON1, Result (..), ToJSON1 (..),
                                         parse, parseJSON1, toJSON1)
 import           Data.Dependent.Map    (DMap)
@@ -39,8 +39,9 @@ import           Data.Text             (Text)
 import           Data.Time             (LocalTime)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
 
-import           Data.GADT.Aeson       (FromJSONViaKey (..), GKey (..),
-                                        ToJSONViaKey (..), mkParseJSON, symName, EqViaKey (..))
+import           Data.GADT.Aeson       (EqViaKey (..), FromJSONViaKey (..),
+                                        GKey (..), ToJSONViaKey (..),
+                                        mkParseJSON, symName, toJSONDMap)
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
@@ -152,6 +153,9 @@ instance ToJSON1 f => ToJSONViaKey PostKey f where
   toJSONViaKey PostTemplate      = toJSON1
   toJSONViaKey PostCategories    = toJSON1
   toJSONViaKey PostTags          = toJSON1
+
+instance ToJSON1 f => ToJSON (DMap PostKey f) where
+  toJSON = toJSONDMap
 
 instance (Applicative f, FromJSON1 f) => FromJSON (DMap PostKey f) where
   parseJSON = mkParseJSON "Post"

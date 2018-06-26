@@ -17,6 +17,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.GADT.Aeson
+                     , Servant.QueryParamMap
                      , Web.WordPress.API
                      , Web.WordPress.Types.ListPosts
                      , Web.WordPress.Types.Post
