@@ -1,16 +1,17 @@
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures       #-}
+{-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
 module Types where
 
-import           Control.Lens             (Lens', lens, Getter, to)
+import           Control.Lens             (Getter, Lens', lens, to)
 import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
+import           Data.Functor.Classes  (Eq1, eq1)
 import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
-import           Web.WordPress.Types.Post (PostKey, PostMap)
+import           Web.WordPress.Types.Post (PostMap)
 
 import           Hedgehog                 (Concrete (..), HTraversable (..),
                                            Var, concrete)
@@ -82,6 +83,20 @@ smooshStatePost
   -> PostMap
 smooshStatePost (StatePost dmi dmc) =
   DM.union dmi (concrete dmc)
+
+hasKeyWithValue ::
+  ( Eq1 f
+  , Eq a
+  , DM.GCompare k
+  )
+  => k a
+  -> f a
+  -> DMap k f
+  -> Bool
+hasKeyWithValue ka fa dm =
+  case DM.lookup ka dm of
+    Just fa' -> eq1 fa fa'
+    Nothing  -> False
 
 -- This looked like it was hanging, but might have been shrinking:
 -- NOTE: upped the size from 54, as it failed on 55th test

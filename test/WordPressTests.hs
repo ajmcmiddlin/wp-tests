@@ -144,7 +144,7 @@ cListPosts Env{..} =
         evalEither =<< liftIO (runClientM (listPosts dm) servantClient)
   in
     Command gen exe [
-      Ensure $ \so _sn _i ps ->
+      Ensure $ \so _sn i ps ->
         length (postsWithStatus so Publish) === length ps
     ]
 
@@ -162,8 +162,8 @@ genList s = do
     numPages = min 1 . (\(d,m) -> d + min m 1) $ numPosts `divMod` perPage
   page <- Gen.int (Range.linear 1 numPages)
   pure . ListPosts DM.empty $ DM.fromList [
-      ListPostsStatus ==> status
-    , ListPostsPerPage ==> perPage
+      --ListPostsStatus ==> status
+     ListPostsPerPage ==> perPage
     , ListPostsPage ==> page
     ]
 
@@ -231,12 +231,12 @@ cGetPost env@Env{..} =
 -- CREATE
 --------------------------------------------------------------------------------
 data CreatePost (v :: * -> *) =
-  CreatePost (DMap PostKey v) PostMap
+  CreatePost PostMap
   deriving (Show)
 
 instance HTraversable CreatePost where
-  htraverse f (CreatePost dmv dmi) =
-    CreatePost <$> htraverseDmap f dmv <*> pure dmi
+  htraverse f (CreatePost dmi) =
+    pure (CreatePost dmi)
 
 cCreatePost
   :: ( MonadGen n
@@ -249,31 +249,46 @@ cCreatePost
 cCreatePost env@Env{..} =
   let
     gen = Just . genCreate
-    exe (CreatePost dmv dmi) = do
-      let
-        dmi' = DM.map (\(Concrete a) -> pure a) dmv
-        dm = DM.union dmi' dmi
-      annotateShow $ encode dm
-      r <- evalEither =<< liftIO (runClientM (createPost (auth env) dm) servantClient)
+    exe (CreatePost pm) = do
+      annotateShow $ encode pm
+      r <- evalEither =<< liftIO (runClientM (createPost (auth env) pm) servantClient)
       pure r
   in
     Command gen exe [
-      Update $ \s (CreatePost dmv dmi) o ->
-          posts %~ (StatePost dmi o :) $ s
+      Update $ \s (CreatePost pm) o ->
+        posts %~ (StatePost pm o :) $ s
+    , Ensure $ \_so sn (CreatePost pmi) pmo ->
+        undefined
     ]
+
+createToStatePost ::
+  CreatePost v
+  -- -> PostMap
+  -> StatePost v
+createToStatePost (CreatePost pm) =
+  let
+    pmDate
+    fStatus pm' =
+      if hasKeyWithValue PostStatus (Identity Future) && 
+  in
+    foldr ($) pm [
+        fStatus
+      ]
 
 genCreate
   :: MonadGen n
   => state (v :: * -> *)
   -> n (CreatePost v)
-genCreate _s = do
+genCreate s = do
   content <- genAlphaNum 1 500
   excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
   let
     excerpt = bool content excerpt' (T.null excerpt')
     gensI = [
         PostDateGmt :=> genUTCTime
-      , PostSlug :=> genAlphaNum 0 30
+        -- We don't want empty slugs because then WordPress defaults them and we can't be
+        -- certain about when things should be equal without implementing their defaulting logic.
+      , PostSlug :=> Gen.filter (existsPostWithSlug s) (genAlphaNum 1 30)
       , PostStatus :=> Gen.enumBounded
      -- , PostPassword
       , PostTitle :=> mkCreateR <$> genAlphaNum 1 30
@@ -295,6 +310,14 @@ genCreate _s = do
     --   ]
     f = fmap DM.fromList . traverse (\(kv :=> fv) -> fmap ((kv :=>) . pure) fv)
   CreatePost <$> pure DM.empty <*> f gensI
+
+existsPostWithSlug ::
+  HasIdentityPosts state
+  => state
+  -> T.Text
+  -> Bool
+existsPostWithSlug s t =
+    not (null t) && any (hasKeyWithValue PostKeySlug t) $ s ^. identityPosts
 
 genUTCTime
   :: MonadGen n
