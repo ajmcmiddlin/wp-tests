@@ -24,10 +24,12 @@ import           Data.Functor.Classes          (Eq1)
 import           Data.Functor.Const            (Const (..))
 import           Data.Functor.Identity         (Identity (..))
 import qualified Data.Text                     as T
-import           Data.Time                     (LocalTime (LocalTime),
-                                                fromGregorian,
+import           Data.Time                     (LocalTime (LocalTime), diffUTCTime,
+                                                fromGregorian, getCurrentTime,
+                                                localTimeToUTC, nominalDay,
                                                 secondsToDiffTime,
-                                                timeToTimeOfDay)
+                                                timeToTimeOfDay, utc,
+                                                utcToLocalTime)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
 import           Servant.Client                (runClientM)
 
@@ -57,8 +59,8 @@ import           Web.WordPress.Types.Post      (PostKey (..), PostMap,
                                                 Renderable, Status (..),
                                                 mkCreatePR, mkCreateR)
 
-import           Types                         (Env (..), HasIdentityPosts (..),
-                                                HasPosts (..), StatePost (..),
+import           Types                         (Env (..), HasIdentityPosts (..), hasKeyMatchingPredicate,
+                                                HasPosts (..), StatePost (..), HasStatePosts (..),
                                                 StatePosts (..),
                                                 WPState (WPState),
                                                 smooshStatePost)
@@ -68,7 +70,7 @@ wordpressTests
   -> TestTree
 wordpressTests env =
   testGroup "wordpress" [
-    testProperty "sequential" . withTests 10 $ propWordpress env
+    testProperty "sequential" $ propWordpress env
   , testProperty "parallel" $ propWordpressParallel env
   ]
 
@@ -77,8 +79,9 @@ propWordpress
   -> Property
 propWordpress env@Env{..} =
   property $ do
+  now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cListPosts, cCreatePost, cGetPost]
+    commands = ($ env) <$> [cListPosts, cCreatePost now, cGetPost]
     initialState = WPState . StatePosts $ []
   actions <- forAll $
     Gen.sequential (Range.linear 1 100) initialState commands
@@ -91,8 +94,9 @@ propWordpressParallel
   -> Property
 propWordpressParallel env@Env{..} =
   withRetries 10 . property $ do
+  now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cListPosts, cCreatePost, cGetPost]
+    commands = ($ env) <$> [cListPosts, cCreatePost now, cGetPost]
     initialState = WPState . StatePosts $ []
   actions <- forAll $
     Gen.parallel (Range.linear 1 200) (Range.linear 1 50) initialState commands
@@ -128,8 +132,8 @@ cListPosts
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPosts state
      , HasIdentityPosts state
+     , HasStatePosts state
      )
   => Env
   -> Command n m state
@@ -144,7 +148,8 @@ cListPosts Env{..} =
         evalEither =<< liftIO (runClientM (listPosts dm) servantClient)
   in
     Command gen exe [
-      Ensure $ \so _sn i ps ->
+      Ensure $ \so _sn _i ps -> do
+        annotateShow $ so ^. statePosts
         length (postsWithStatus so Publish) === length ps
     ]
 
@@ -230,12 +235,12 @@ cGetPost env@Env{..} =
 --------------------------------------------------------------------------------
 -- CREATE
 --------------------------------------------------------------------------------
-data CreatePost (v :: * -> *) =
+newtype CreatePost (v :: * -> *) =
   CreatePost PostMap
   deriving (Show)
 
 instance HTraversable CreatePost where
-  htraverse f (CreatePost dmi) =
+  htraverse _ (CreatePost dmi) =
     pure (CreatePost dmi)
 
 cCreatePost
@@ -243,52 +248,79 @@ cCreatePost
      , MonadIO m
      , MonadTest m
      , HasPosts state
+     , HasIdentityPosts state
      )
-  => Env
+  => LocalTime
+  -> Env
   -> Command n m (state :: (* -> *) -> *)
-cCreatePost env@Env{..} =
+cCreatePost now env@Env{..} =
   let
-    gen = Just . genCreate
+    gen = Just . genCreate now
     exe (CreatePost pm) = do
       annotateShow $ encode pm
-      r <- evalEither =<< liftIO (runClientM (createPost (auth env) pm) servantClient)
-      pure r
+      evalEither =<< liftIO (runClientM (createPost (auth env) pm) servantClient)
   in
     Command gen exe [
-      Update $ \s (CreatePost pm) o ->
-        posts %~ (StatePost pm o :) $ s
-    , Ensure $ \_so sn (CreatePost pmi) pmo ->
-        undefined
+      Update $ \s cp o ->
+        posts %~ (createToStatePost now cp o :) $ s
+    -- , Ensure $ \_so _sn (CreatePost _pmi) _pmo ->
+    --     undefined
     ]
 
 createToStatePost ::
-  CreatePost v
-  -- -> PostMap
+  LocalTime
+  -> CreatePost v
+  -> Var PostMap v
   -> StatePost v
-createToStatePost (CreatePost pm) =
+createToStatePost now (CreatePost pm) pmo = do
   let
-    pmDate
-    fStatus pm' =
-      if hasKeyWithValue PostStatus (Identity Future) && 
-  in
-    foldr ($) pm [
-        fStatus
+    pmi =
+      foldr ($) pm [
+        fixCreateStatus now
       ]
+  StatePost pmi pmo
 
-genCreate
-  :: MonadGen n
-  => state (v :: * -> *)
+fixCreateStatus ::
+  LocalTime
+  -> PostMap
+  -> PostMap
+fixCreateStatus now pm =
+  let
+    haveDateLocal = DM.member PostDate pm
+    dateGmtBeforeNow = hasKeyMatchingPredicate PostDateGmt (< Identity now) pm
+    dateLocalBeforeNow = hasKeyMatchingPredicate PostDate (< Identity now) pm
+    dateBeforeNow = (not haveDateLocal && dateGmtBeforeNow) || dateLocalBeforeNow
+    status =
+      if hasKeyMatchingPredicate PostStatus (== Identity Future) pm && dateBeforeNow
+      then Publish
+      else Future
+  in
+    DM.insert PostStatus (Identity status) pm
+
+genCreate ::
+  ( MonadGen n
+  , HasIdentityPosts state
+  )
+  => LocalTime
+  -> state (v :: * -> *)
   -> n (CreatePost v)
-genCreate s = do
+genCreate now s = do
   content <- genAlphaNum 1 500
   excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
+  status <- Gen.enumBounded
   let
+    -- If something is marked for publishing in the future then make sure our date is at least a
+    -- day away so its status doesn't change during testing.
+    genDate =
+      if status == Future
+      then Gen.filter (not . withinADay now) genLocalTime
+      else genLocalTime
     excerpt = bool content excerpt' (T.null excerpt')
     gensI = [
-        PostDateGmt :=> genUTCTime
+        PostDateGmt :=> genDate
         -- We don't want empty slugs because then WordPress defaults them and we can't be
         -- certain about when things should be equal without implementing their defaulting logic.
-      , PostSlug :=> Gen.filter (existsPostWithSlug s) (genAlphaNum 1 30)
+      , PostSlug :=> Gen.filter (not . existsPostWithSlug s) (genAlphaNum 1 300)
       , PostStatus :=> Gen.enumBounded
      -- , PostPassword
       , PostTitle :=> mkCreateR <$> genAlphaNum 1 30
@@ -309,20 +341,34 @@ genCreate s = do
     -- gensV = [
     --   ]
     f = fmap DM.fromList . traverse (\(kv :=> fv) -> fmap ((kv :=>) . pure) fv)
-  CreatePost <$> pure DM.empty <*> f gensI
+  CreatePost <$> f gensI
+
+withinADay ::
+  LocalTime
+  -> LocalTime
+  -> Bool
+withinADay a b =
+  let
+    a' = localTimeToUTC utc a
+    b' = localTimeToUTC utc b
+  in
+    abs (diffUTCTime a' b') < nominalDay
 
 existsPostWithSlug ::
   HasIdentityPosts state
-  => state
+  => state v
   -> T.Text
   -> Bool
 existsPostWithSlug s t =
-    not (null t) && any (hasKeyWithValue PostKeySlug t) $ s ^. identityPosts
+  let
+    isMatchingSlug = any (hasKeyMatchingPredicate PostSlug (== Identity t)) $ s ^. identityPosts
+  in
+    (not . null $ Identity t) && isMatchingSlug
 
-genUTCTime
+genLocalTime
   :: MonadGen n
   => n LocalTime
-genUTCTime =
+genLocalTime =
   let
     gYear = Gen.int (Range.linearFrom 1900 1970 2500)
     gMonth = Gen.int (Range.linear 1 12)

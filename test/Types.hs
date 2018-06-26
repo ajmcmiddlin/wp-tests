@@ -42,6 +42,7 @@ newtype WPState (v :: * -> *) =
   WPState
   { _posts :: StatePosts v
   }
+  deriving (Show)
 
 instance HasStatePosts WPState where
   statePosts = lens _posts (const WPState)
@@ -58,6 +59,7 @@ instance HasVarPosts WPState where
 
 newtype StatePosts v =
   StatePosts {getStatePosts :: [StatePost v]}
+  deriving (Show)
 
 instance HasPosts StatePosts where
   posts = lens getStatePosts (const StatePosts)
@@ -84,18 +86,15 @@ smooshStatePost
 smooshStatePost (StatePost dmi dmc) =
   DM.union dmi (concrete dmc)
 
-hasKeyWithValue ::
-  ( Eq1 f
-  , Eq a
-  , DM.GCompare k
-  )
+hasKeyMatchingPredicate ::
+  DM.GCompare k
   => k a
-  -> f a
+  -> (f a -> Bool)
   -> DMap k f
   -> Bool
-hasKeyWithValue ka fa dm =
+hasKeyMatchingPredicate ka p dm =
   case DM.lookup ka dm of
-    Just fa' -> eq1 fa fa'
+    Just fa -> p fa
     Nothing  -> False
 
 -- This looked like it was hanging, but might have been shrinking:
