@@ -35,3 +35,7 @@ When creating posts:
 * If an unused slug is provided -- that slug is used.
 * If an empty slug or no slug field are provided -- a slug is generated.
 * If a slug is provided but would break uniqueness -- a number is appended to differentiate it.
+* If a slug is provided that contains formatting or capitals -- they are all stripped such that it
+  contains only lower case alphanumeric characters and hyphens.
+* If a slug is too long, it is truncated to 193 characters apparently.
+
