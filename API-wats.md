@@ -28,3 +28,10 @@ and the posts returned when listing posts, both have objects for each of these f
 the fields in these objects differs when being returned from a create, and when returned from a
 listing.
 
+### Slugs man...
+
+When creating posts:
+
+* If an unused slug is provided -- that slug is used.
+* If an empty slug or no slug field are provided -- a slug is generated.
+* If a slug is provided but would break uniqueness -- a number is appended to differentiate it.
