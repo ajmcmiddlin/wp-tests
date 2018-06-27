@@ -4,7 +4,7 @@
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
-{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE MultiWayIf                #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE StandaloneDeriving        #-}
@@ -20,11 +20,8 @@ import           Data.ByteString               (ByteString)
 import           Data.Dependent.Map            (DMap)
 import qualified Data.Dependent.Map            as DM
 import           Data.Dependent.Sum            (DSum (..), (==>))
-import           Data.Functor                  (void)
 import           Data.Functor.Classes          (Eq1)
-import           Data.Functor.Const            (Const (..))
 import           Data.Functor.Identity         (Identity (..))
-import           Data.Semigroup                ((<>))
 import qualified Data.Text                     as T
 import           Data.Time                     (LocalTime (LocalTime),
                                                 diffUTCTime, fromGregorian,
@@ -152,9 +149,15 @@ cListPosts Env{..} =
         evalEither =<< liftIO (runClientM (listPosts dm) servantClient)
   in
     Command gen exe [
-      Ensure $ \so _sn _i ps -> do
+      Ensure $ \so _sn (ListPosts _ lpi) ps -> do
         annotateShow $ so ^. statePosts
-        length (postsWithStatus so Publish) === length ps
+        let
+          lup :: a -> ListPostsKey a -> a
+          lup def key = maybe def runIdentity $ DM.lookup key lpi
+          pws = lup Publish ListPostsStatus
+          perPage = lup 10 ListPostsPerPage
+          eLength = length . take perPage $ postsWithStatus so pws
+        eLength === length ps
     ]
 
 genList
@@ -300,12 +303,8 @@ fixCreateStatus now pm =
         haveDateLocal = DM.member PostDate pm
         fieldBeforeNow f = hasKeyMatchingPredicate f (< Identity now) pm
         fieldAfterNow f = hasKeyMatchingPredicate f (> Identity now) pm
-        dateGmtBeforeNow = fieldBeforeNow PostDateGmt
-        dateLocalBeforeNow = fieldBeforeNow PostDate
-        dateGmtAfterNow = fieldAfterNow PostDateGmt
-        dateLocalAfterNow = fieldAfterNow PostDate
-        dateBeforeNow = (not haveDateLocal && dateGmtBeforeNow) || dateLocalBeforeNow
-        dateAfterNow = (not haveDateLocal && dateGmtAfterNow) || dateLocalAfterNow
+        dateBeforeNow = (not haveDateLocal && fieldBeforeNow PostDateGmt) || fieldBeforeNow PostDate
+        dateAfterNow = (not haveDateLocal && fieldAfterNow PostDateGmt) || fieldAfterNow PostDate
         hasStatus = ($ pm) . hasKeyMatchingPredicate PostStatus . (==) . Identity
         status =
           if | hasStatus Future && dateBeforeNow -> Identity Publish
@@ -320,7 +319,8 @@ fixSlug ::
   -> PostMap
 fixSlug pm =
   case DM.lookup PostSlug pm of
-    Just s -> DM.insert PostSlug (T.toLower <$> s) pm
+    -- TODO: make a slug newtype and smart constructor to take care of all this
+    Just s  -> DM.insert PostSlug (T.take 200 . T.toLower <$> s) pm
     Nothing -> pm
 
 genCreate ::
