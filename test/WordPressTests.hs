@@ -171,7 +171,7 @@ genList s = do
   perPage <- Gen.int (Range.linear 1 100)
   let
     numPosts = length $ postsWithStatus s status
-    numPages = min 1 . (\(d,m) -> d + min m 1) $ numPosts `divMod` perPage
+    numPages = max 1 . (\(d,m) -> d + min m 1) $ numPosts `divMod` perPage
   page <- Gen.int (Range.linear 1 numPages)
   pure . ListPosts DM.empty $ DM.fromList [
       --ListPostsStatus ==> status
