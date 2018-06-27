@@ -28,7 +28,7 @@ import           Data.Aeson            (FromJSON (..), ToJSON (..),
 import           Data.Aeson.Types      (FromJSON1, Result (..), ToJSON1 (..),
                                         parse, parseJSON1, toJSON1)
 import           Data.Dependent.Map    (DMap)
-import           Data.Dependent.Sum    (ShowTag (..))
+import           Data.Dependent.Sum    (ShowTag (..), EqTag (..))
 import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
 import           Data.Functor.Identity (Identity)
 import           Data.GADT.Compare.TH  (deriveGCompare, deriveGEq)
@@ -36,6 +36,7 @@ import           Data.GADT.Show.TH     (deriveGShow)
 import           Data.Semigroup        ((<>))
 import           Data.Some             (Some (This))
 import           Data.Text             (Text)
+import qualified Data.Text as T
 import           Data.Time             (LocalTime)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
 
@@ -186,6 +187,34 @@ instance Show1 f => ShowTag PostKey f where
   showTaggedPrec PostTemplate      = showsPrec1
   showTaggedPrec PostCategories    = showsPrec1
   showTaggedPrec PostTags          = showsPrec1
+
+-- TODO: use TH to get rid of this
+instance Eq1 f => EqTag PostKey f where
+  eqTagged PostDate PostDate          = eq1
+  eqTagged PostDateGmt PostDateGmt       = eq1
+  eqTagged PostGuid PostGuid          = eq1
+  eqTagged PostId PostId            = eq1
+  eqTagged PostLink PostLink          = eq1
+  eqTagged PostModified PostModified      = eq1
+  eqTagged PostModifiedGmt PostModifiedGmt   = eq1
+  eqTagged PostSlug PostSlug          = eq1
+  eqTagged PostStatus PostStatus        = eq1
+  eqTagged PostType PostType          = eq1
+  eqTagged PostPassword PostPassword      = eq1
+  eqTagged PostTitle PostTitle         = eq1
+  eqTagged PostContent PostContent       = eq1
+  eqTagged PostAuthor PostAuthor        = eq1
+  eqTagged PostExcerpt PostExcerpt       = eq1
+  eqTagged PostFeaturedMedia PostFeaturedMedia = eq1
+  eqTagged PostCommentStatus PostCommentStatus = eq1
+  eqTagged PostPingStatus PostPingStatus    = eq1
+  eqTagged PostFormat PostFormat        = eq1
+  eqTagged PostMeta PostMeta          = eq1
+  eqTagged PostSticky PostSticky        = eq1
+  eqTagged PostTemplate PostTemplate      = eq1
+  eqTagged PostCategories PostCategories    = eq1
+  eqTagged PostTags PostTags          = eq1
+  eqTagged _ _ = \_ _ -> False
 
 -- TODO: use TH and Symbol to get rid of this
 instance GKey PostKey where
@@ -437,7 +466,8 @@ renderedEq
   -> r
   -> Bool
 renderedEq r r' =
-  r ^. rendered == r' ^. rendered
+     T.isInfixOf (r ^. rendered) (r' ^. rendered)
+  || T.isInfixOf (r' ^. rendered) (r ^. rendered)
 
 instance HasRendered Renderable where
   rendered = to $ \case

@@ -23,11 +23,12 @@ import           Data.Functor                  (void)
 import           Data.Functor.Classes          (Eq1)
 import           Data.Functor.Const            (Const (..))
 import           Data.Functor.Identity         (Identity (..))
+import           Data.Semigroup                ((<>))
 import qualified Data.Text                     as T
-import           Data.Time                     (LocalTime (LocalTime), diffUTCTime,
-                                                fromGregorian, getCurrentTime,
-                                                localTimeToUTC, nominalDay,
-                                                secondsToDiffTime,
+import           Data.Time                     (LocalTime (LocalTime),
+                                                diffUTCTime, fromGregorian,
+                                                getCurrentTime, localTimeToUTC,
+                                                nominalDay, secondsToDiffTime,
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
@@ -38,7 +39,7 @@ import           Hedgehog                      (Callback (..),
                                                 Concrete (Concrete),
                                                 HTraversable (htraverse),
                                                 MonadGen, MonadTest, Property,
-                                                Symbolic, Var (Var),
+                                                Symbolic, Var (Var), annotate,
                                                 annotateShow, assert, concrete,
                                                 eval, evalEither, evalIO,
                                                 executeParallel,
@@ -59,10 +60,12 @@ import           Web.WordPress.Types.Post      (PostKey (..), PostMap,
                                                 Renderable, Status (..),
                                                 mkCreatePR, mkCreateR)
 
-import           Types                         (Env (..), HasIdentityPosts (..), hasKeyMatchingPredicate,
-                                                HasPosts (..), StatePost (..), HasStatePosts (..),
-                                                StatePosts (..),
+import           Types                         (Env (..), HasIdentityPosts (..),
+                                                HasPosts (..),
+                                                HasStatePosts (..),
+                                                StatePost (..), StatePosts (..),
                                                 WPState (WPState),
+                                                hasKeyMatchingPredicate,
                                                 smooshStatePost)
 
 wordpressTests
@@ -219,16 +222,17 @@ cGetPost env@Env{..} =
       evalEither =<< liftIO (runClientM (getPost (auth env) postId) servantClient)
   in
     Command gen exe [
-      Ensure $ \_so _sn (GetPost sp) p -> do
+      Require $ \s (GetPost sp) ->
+        (s ^.. posts . traverse . filtered (== sp)) & not . null
+    , Ensure $ \_so _sn (GetPost sp) p -> do
         let
           pState = smooshStatePost sp
 
-          eqVals :: PostKey a -> Identity a -> Bool
-          eqVals kv fv = eqViaKey kv fv (pState DM.! kv)
-
-        annotateShow pState
+          sp' = DM.union pState p
+          p' = DM.union p sp'
+        annotateShow sp
         annotateShow p
-        void $ DM.traverseWithKey (\kv fv -> Const <$> assert (eqVals kv fv)) p
+        sp' === p'
     ]
 
 
@@ -257,8 +261,11 @@ cCreatePost now env@Env{..} =
   let
     gen = Just . genCreate now
     exe (CreatePost pm) = do
+      annotateShow pm
       annotateShow $ encode pm
-      evalEither =<< liftIO (runClientM (createPost (auth env) pm) servantClient)
+      r <- evalEither =<< liftIO (runClientM (createPost (auth env) pm) servantClient)
+      annotateShow $ createToStatePost now (CreatePost pm) (Var (Concrete r))
+      pure r
   in
     Command gen exe [
       Update $ \s cp o ->
@@ -277,6 +284,7 @@ createToStatePost now (CreatePost pm) pmo = do
     pmi =
       foldr ($) pm [
         fixCreateStatus now
+      , fixSlug
       ]
   StatePost pmi pmo
 
@@ -285,17 +293,28 @@ fixCreateStatus ::
   -> PostMap
   -> PostMap
 fixCreateStatus now pm =
-  let
-    haveDateLocal = DM.member PostDate pm
-    dateGmtBeforeNow = hasKeyMatchingPredicate PostDateGmt (< Identity now) pm
-    dateLocalBeforeNow = hasKeyMatchingPredicate PostDate (< Identity now) pm
-    dateBeforeNow = (not haveDateLocal && dateGmtBeforeNow) || dateLocalBeforeNow
-    status =
-      if hasKeyMatchingPredicate PostStatus (== Identity Future) pm && dateBeforeNow
-      then Publish
-      else Future
-  in
-    DM.insert PostStatus (Identity status) pm
+  case DM.lookup PostStatus pm of
+    Just is ->
+      let
+        haveDateLocal = DM.member PostDate pm
+        dateGmtBeforeNow = hasKeyMatchingPredicate PostDateGmt (< Identity now) pm
+        dateLocalBeforeNow = hasKeyMatchingPredicate PostDate (< Identity now) pm
+        dateBeforeNow = (not haveDateLocal && dateGmtBeforeNow) || dateLocalBeforeNow
+        status =
+          if hasKeyMatchingPredicate PostStatus (== Identity Future) pm && dateBeforeNow
+          then Identity Publish
+          else is
+      in
+        DM.insert PostStatus status pm
+    Nothing -> pm
+
+fixSlug ::
+  PostMap
+  -> PostMap
+fixSlug pm =
+  case DM.lookup PostSlug pm of
+    Just s -> DM.insert PostSlug (T.toLower <$> s) pm
+    Nothing -> pm
 
 genCreate ::
   ( MonadGen n

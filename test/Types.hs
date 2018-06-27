@@ -42,7 +42,7 @@ newtype WPState (v :: * -> *) =
   WPState
   { _posts :: StatePosts v
   }
-  deriving (Show)
+  deriving (Eq, Show)
 
 instance HasStatePosts WPState where
   statePosts = lens _posts (const WPState)
@@ -59,7 +59,7 @@ instance HasVarPosts WPState where
 
 newtype StatePosts v =
   StatePosts {getStatePosts :: [StatePost v]}
-  deriving (Show)
+  deriving (Eq, Show)
 
 instance HasPosts StatePosts where
   posts = lens getStatePosts (const StatePosts)
@@ -74,7 +74,7 @@ instance HasVarPosts StatePosts where
 
 data StatePost v =
   StatePost PostMap (Var PostMap v)
-  deriving (Show)
+  deriving (Eq, Show)
 
 instance HTraversable StatePost where
   htraverse f (StatePost dmi dmv) =
