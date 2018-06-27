@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE StandaloneDeriving        #-}
@@ -297,13 +298,19 @@ fixCreateStatus now pm =
     Just is ->
       let
         haveDateLocal = DM.member PostDate pm
-        dateGmtBeforeNow = hasKeyMatchingPredicate PostDateGmt (< Identity now) pm
-        dateLocalBeforeNow = hasKeyMatchingPredicate PostDate (< Identity now) pm
+        fieldBeforeNow f = hasKeyMatchingPredicate f (< Identity now) pm
+        fieldAfterNow f = hasKeyMatchingPredicate f (> Identity now) pm
+        dateGmtBeforeNow = fieldBeforeNow PostDateGmt
+        dateLocalBeforeNow = fieldBeforeNow PostDate
+        dateGmtAfterNow = fieldAfterNow PostDateGmt
+        dateLocalAfterNow = fieldAfterNow PostDate
         dateBeforeNow = (not haveDateLocal && dateGmtBeforeNow) || dateLocalBeforeNow
+        dateAfterNow = (not haveDateLocal && dateGmtAfterNow) || dateLocalAfterNow
+        hasStatus = ($ pm) . hasKeyMatchingPredicate PostStatus . (==) . Identity
         status =
-          if hasKeyMatchingPredicate PostStatus (== Identity Future) pm && dateBeforeNow
-          then Identity Publish
-          else is
+          if | hasStatus Future && dateBeforeNow -> Identity Publish
+             | hasStatus Publish && dateAfterNow -> Identity Future
+             | otherwise -> is
       in
         DM.insert PostStatus status pm
     Nothing -> pm
