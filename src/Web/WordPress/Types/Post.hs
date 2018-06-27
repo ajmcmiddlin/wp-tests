@@ -457,9 +457,9 @@ data Renderable =
 class HasRendered r where
   rendered :: Getter r Text
 
--- | Our notion of equality for renderable things is that their renderings are equal, and nothing
--- else matters. This allows us to make comparisons regardless of the contexts in which a renderable
--- was created.
+-- | Our notion of equality for renderable things is that one of their renderings is a substring of
+-- the other. For example, when we create a post, WordPress might add HTML tags around it when
+-- rendering.
 renderedEq
   :: HasRendered r
   => r
