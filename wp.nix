@@ -35,7 +35,6 @@ wordpress =
     services.mysql = {
       enable = true;
       package = pkgs.mysql;
-      initialScript = ./init.sql;
     };
 
     services.httpd = {
