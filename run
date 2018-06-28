@@ -6,7 +6,7 @@ set -x WP_PASS 1234abcd
 set -x WP_RESET_PATH wordpress.sql
 
 # Generate reset sql given IP of target
-rm $WP_RESET_PATH
+rm -f $WP_RESET_PATH
 nix-build wordpress.sql.nix --argstr ip $WP_HOST -o $WP_RESET_PATH
 
 ghci
