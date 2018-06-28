@@ -52,7 +52,7 @@ import           Test.Tasty.Hedgehog           (testProperty)
 
 import           Data.GADT.Aeson               (EqViaKey (..))
 import           Web.WordPress.API             (createPost, getPost, listPosts)
-import           Web.WordPress.Types.ListPosts (ListPostsKey (..))
+import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
 import           Web.WordPress.Types.Post      (PostKey (..), PostMap,
                                                 RESTContext (Create),
                                                 Renderable, Status (..),
@@ -140,6 +140,11 @@ cListPosts
   -> Command n m state
 cListPosts Env{..} =
   let
+    lup :: a -> ListPostsKey a -> ListPostsMap -> a
+    lup def key = maybe def runIdentity . DM.lookup key
+
+    lupPerPage = lup 10 ListPostsPerPage
+
     gen = Just . genList
     exe (ListPosts dmv dmi) =
       let
@@ -149,13 +154,17 @@ cListPosts Env{..} =
         evalEither =<< liftIO (runClientM (listPosts dm) servantClient)
   in
     Command gen exe [
-      Ensure $ \so _sn (ListPosts _ lpi) ps -> do
+      Require $ \s (ListPosts _ lpi) ->
+        let
+          numPosts = length . postsWithStatus s $ lup Publish ListPostsStatus lpi
+          numPages' = numPages numPosts $ lupPerPage lpi
+        in
+          lup 1 ListPostsPage lpi <= numPages'
+    , Ensure $ \so _sn (ListPosts _ lpi) ps -> do
         annotateShow $ so ^. statePosts
         let
-          lup :: a -> ListPostsKey a -> a
-          lup def key = maybe def runIdentity $ DM.lookup key lpi
-          pws = lup Publish ListPostsStatus
-          perPage = lup 10 ListPostsPerPage
+          pws = lup Publish ListPostsStatus lpi
+          perPage = lupPerPage lpi
           eLength = length . take perPage $ postsWithStatus so pws
         eLength === length ps
     ]
@@ -171,8 +180,8 @@ genList s = do
   perPage <- Gen.int (Range.linear 1 100)
   let
     numPosts = length $ postsWithStatus s status
-    numPages = max 1 . (\(d,m) -> d + min m 1) $ numPosts `divMod` perPage
-  page <- Gen.int (Range.linear 1 numPages)
+    numPages' = numPages numPosts perPage
+  page <- Gen.int (Range.linear 1 numPages')
   pure . ListPosts DM.empty $ DM.fromList [
       --ListPostsStatus ==> status
      ListPostsPerPage ==> perPage
@@ -195,6 +204,12 @@ postsWithStatus
 postsWithStatus s status =
   postsWhere s ((== Identity status) . (DM.! PostStatus))
 
+numPages ::
+  Int
+  -> Int
+  -> Int
+numPages numPosts perPage =
+  max 1 . (\(d,m) -> d + min m 1) $ numPosts `divMod` perPage
 
 --------------------------------------------------------------------------------
 -- GET
@@ -274,8 +289,6 @@ cCreatePost now env@Env{..} =
     Command gen exe [
       Update $ \s cp o ->
         posts %~ (createToStatePost now cp o :) $ s
-    -- , Ensure $ \_so _sn (CreatePost _pmi) _pmo ->
-    --     undefined
     ]
 
 createToStatePost ::
