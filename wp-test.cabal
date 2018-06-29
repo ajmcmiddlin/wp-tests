@@ -69,4 +69,4 @@ test-suite state-tests
   default-language:    Haskell2010
   main-is:             Test.hs
   type:                exitcode-stdio-1.0
-  ghc-options:         -Wall -threaded -Wredundant-constraints
+  ghc-options:         -Wall -threaded -Wredundant-constraints -rtsopts -O2

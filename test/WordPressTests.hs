@@ -100,7 +100,7 @@ propWordpressParallel env@Env{..} =
     commands = ($ env) <$> [cListPosts, cCreatePost now, cGetPost]
     initialState = WPState . StatePosts $ []
   actions <- forAll $
-    Gen.parallel (Range.linear 1 200) (Range.linear 1 50) initialState commands
+    Gen.parallel (Range.linear 1 100) (Range.linear 1 10) initialState commands
 
   test $ do
     evalIO reset
