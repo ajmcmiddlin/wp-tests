@@ -9,4 +9,4 @@ set -x WP_RESET_PATH wordpress.sql
 rm -f $WP_RESET_PATH
 nix-build wordpress.sql.nix --argstr ip $WP_HOST -o $WP_RESET_PATH
 
-ghci
+eval $argv
