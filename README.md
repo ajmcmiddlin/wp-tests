@@ -35,3 +35,27 @@ When testing, we drop the WordPress database and reinstate it using a database d
 ```
 nixops ssh -d wp wordpress "mysqldump --databases wordpress" > wordpress.sql
 ```
+
+## Profiling
+
+When running in GHCi I was observing serious slow downs (possibly hangs) around test case 50-60. In
+an attempt to find out what might be taking so long I enabled profiling. To do this I...
+
+ - Added a `profiling` flag to `default.nix` as per the Nixpkgs manual's instructions (see `default.nix`).
+ - Added `-rtsopts -O2` to the `ghc-options` section of the exe in `wp-tests.cabal`.
+ - Ran the following.
+
+```
+$ nix-shell --run fish --arg profiling true
+[nix-shell] $ cabal configure --enable-profiling --enable-library-profiling
+[nix-shell] $ cabal build
+[nix-shell] $ ./run dist/build/state-tests/state-tests -p parallel +RTS -p -postate-tests-(date +%Y%m%dT%H%M%S)
+```
+
+The options I'm using are:
+
+ - `-p parallel` is a tasty option to only run the parallel tests, as this is where the slow down is happening
+ - `+RTS -p` enable profiling
+ - `-postate-tests-(date +%Y%m%dT%H%M%S))` to give the profiling output a timestamp so I don't clobber old runs
+
+
