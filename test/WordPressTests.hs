@@ -282,9 +282,7 @@ cCreatePost now env@Env{..} =
     exe (CreatePost pm) = do
       annotateShow pm
       annotateShow $ encode pm
-      r <- evalEither =<< liftIO (runClientM (createPost (auth env) pm) servantClient)
-      annotateShow $ createToStatePost now (CreatePost pm) (Var (Concrete r))
-      pure r
+      evalEither =<< liftIO (runClientM (createPost (auth env) pm) servantClient)
   in
     Command gen exe [
       Update $ \s cp o ->
