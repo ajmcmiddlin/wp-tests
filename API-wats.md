@@ -39,3 +39,8 @@ When creating posts:
   contains only lower case alphanumeric characters and hyphens.
 * If a slug is too long, it is truncated to 200 characters apparently.
 
+### Rendering
+
+User facing text fields (title, content, excerpt) have a `rendered` attribute that WordPress
+produces from the raw input. For example "1x0" gets changed to "1&times;0". This makes testing hard
+because you either have to carefully limit your inputs or implement WordPress's rendering engine.
