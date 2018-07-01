@@ -342,7 +342,7 @@ genCreate ::
   -> state (v :: * -> *)
   -> n (CreatePost v)
 genCreate now s = do
-  content <- genAlphaNum 1 500
+  content <- genAlpha 1 500
   excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
   status <- Gen.enumBounded
   let
@@ -357,10 +357,10 @@ genCreate now s = do
         PostDateGmt :=> genDate
         -- We don't want empty slugs because then WordPress defaults them and we can't be
         -- certain about when things should be equal without implementing their defaulting logic.
-      , PostSlug :=> Gen.filter (not . existsPostWithSlug s) (genAlphaNum 1 300)
+      , PostSlug :=> Gen.filter (not . existsPostWithSlug s) (genAlpha 1 300)
       , PostStatus :=> Gen.enumBounded
      -- , PostPassword
-      , PostTitle :=> mkCreateR <$> genAlphaNum 1 30
+      , PostTitle :=> mkCreateR <$> genAlpha 1 30
       , PostContent :=> pure (mkCreatePR content)
       -- TODO: author should come from state. Start state has user with ID = 1.
       , PostAuthor :=> pure 1
@@ -418,13 +418,13 @@ genLocalTime =
   in
     LocalTime <$> gUTCTimeDay <*> gDiffTime
 
-genAlphaNum
+genAlpha
   :: MonadGen n
   => Int
   -> Int
   -> n T.Text
-genAlphaNum min' max' =
-  Gen.text (Range.linear min' max') Gen.alphaNum
+genAlpha min' max' =
+  Gen.text (Range.linear min' max') Gen.alpha
 
 milliToMicro :: Integer -> Integer
 milliToMicro = (* 1000)
