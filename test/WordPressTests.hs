@@ -11,12 +11,11 @@
 
 module WordPressTests where
 
-import           Control.Lens                  (filtered, to, (%~), (&), (^.),
+import           Control.Lens                  (filtered, (%~), (&), (^.),
                                                 (^..))
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
-import           Data.ByteString               (ByteString)
 import           Data.Dependent.Map            (DMap)
 import qualified Data.Dependent.Map            as DM
 import           Data.Dependent.Sum            (DSum (..), (==>))
@@ -37,25 +36,21 @@ import           Hedgehog                      (Callback (..),
                                                 Concrete (Concrete),
                                                 HTraversable (htraverse),
                                                 MonadGen, MonadTest, Property,
-                                                Symbolic, Var (Var), annotate,
-                                                annotateShow, assert, concrete,
-                                                eval, evalEither, evalIO,
-                                                executeParallel,
-                                                executeSequential, failure,
-                                                forAll, property, success, test,
-                                                withRetries, withShrinks,
-                                                withTests, (===))
+                                                Symbolic, Var, annotateShow,
+                                                concrete, eval, evalEither,
+                                                evalIO, executeParallel,
+                                                executeSequential, forAll,
+                                                property, test, withRetries,
+                                                (===))
 import qualified Hedgehog.Gen                  as Gen
 import qualified Hedgehog.Range                as Range
 import           Test.Tasty                    (TestTree, testGroup)
 import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Data.GADT.Aeson               (EqViaKey (..))
 import           Web.WordPress.API             (createPost, getPost, listPosts)
 import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
-import           Web.WordPress.Types.Post      (PostKey (..), PostMap,
-                                                RESTContext (Create),
-                                                Renderable, Status (..),
+import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
+                                                PostMap, Status (..),
                                                 mkCreatePR, mkCreateR)
 
 import           Types                         (Env (..), HasIdentityPosts (..),
@@ -183,8 +178,8 @@ genList s = do
     numPages' = numPages numPosts perPage
   page <- Gen.int (Range.linear 1 numPages')
   pure . ListPosts DM.empty $ DM.fromList [
-      --ListPostsStatus ==> status
-     ListPostsPerPage ==> perPage
+      ListPostsStatus ==> status
+    , ListPostsPerPage ==> perPage
     , ListPostsPage ==> page
     ]
 
@@ -363,7 +358,7 @@ genCreate now s = do
       , PostTitle :=> mkCreateR <$> genAlpha 1 30
       , PostContent :=> pure (mkCreatePR content)
       -- TODO: author should come from state. Start state has user with ID = 1.
-      , PostAuthor :=> pure 1
+      , PostAuthor :=> pure (Author 1)
       , PostExcerpt :=> pure (mkCreatePR excerpt)
      -- , PostFeaturedMedia
      -- , PostCommentStatus

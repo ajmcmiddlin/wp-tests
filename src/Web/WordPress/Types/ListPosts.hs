@@ -6,26 +6,34 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TupleSections         #-}
 
 {-# OPTIONS_GHC -Wno-unused-matches#-}
 
 module Web.WordPress.Types.ListPosts where
 
-import           Data.Aeson               (ToJSON (..))
+import           Data.Aeson               (ToJSON (..), Value (String))
 import           Data.Aeson.Types         (ToJSON1 (..), toJSON1)
 import           Data.Dependent.Map       (DMap)
 import           Data.Dependent.Sum       (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes     (Eq1, Show1, eq1, showsPrec1)
-import           Data.Functor.Identity    (Identity)
+import           Data.Functor.Identity    (Identity (..))
 import           Data.GADT.Compare.TH     (deriveGCompare, deriveGEq)
 import           Data.GADT.Show.TH        (deriveGShow)
-import           Data.Set                 (Set)
+import           Data.List.NonEmpty       (NonEmpty)
 import           Data.Some                (Some (This))
 import           Data.Text                (Text)
 import           Data.Time                (LocalTime)
+import           Web.HttpApiData          (ToHttpApiData (toQueryParam))
 
-import           Data.GADT.Aeson          (GKey (..), ToJSONViaKey (..))
-import           Web.WordPress.Types.Post (Context, Status, Sticky)
+import           Data.GADT.Aeson          (GKey (..), ToJSONViaKey (..),
+                                           toJSONDMap)
+import           Servant.QueryParamMap    (ToQueryParamKey (..),
+                                           ToQueryParamKeyValues (..),
+                                           defaultToQueryParamKeyValues,
+                                           nonEmptyQueryParamKeyValues,
+                                           toQueryParam1)
+import           Web.WordPress.Types.Post (Author, Context, Status, Sticky)
 
 type ListPostsMap = DMap ListPostsKey Identity
 
@@ -35,19 +43,19 @@ data ListPostsKey a where
   ListPostsPerPage           :: ListPostsKey Int
   ListPostsSearch            :: ListPostsKey Text
   ListPostsAfter             :: ListPostsKey LocalTime
-  ListPostsAuthor            :: ListPostsKey Int
-  ListPostsAuthorExclude     :: ListPostsKey (Set Int)
+  ListPostsAuthor            :: ListPostsKey Author
+  ListPostsAuthorExclude     :: ListPostsKey (NonEmpty Author)
   ListPostsBefore            :: ListPostsKey LocalTime
-  ListPostsExclude           :: ListPostsKey (Set Int)
-  ListPostsInclude           :: ListPostsKey (Set Int)
+  ListPostsExclude           :: ListPostsKey (NonEmpty Int)
+  ListPostsInclude           :: ListPostsKey (NonEmpty Int)
   ListPostsOffset            :: ListPostsKey Int
   ListPostsOrder             :: ListPostsKey Order
-  ListPostsSlug              :: ListPostsKey (Set Text)
+  ListPostsSlug              :: ListPostsKey (NonEmpty Text)
   ListPostsStatus            :: ListPostsKey Status
-  ListPostsCategories        :: ListPostsKey (Set Text)
-  ListPostsCategoriesExclude :: ListPostsKey (Set Text)
-  ListPostsTags              :: ListPostsKey (Set Text)
-  ListPostsTagsExclude       :: ListPostsKey (Set Text)
+  ListPostsCategories        :: ListPostsKey (NonEmpty Text)
+  ListPostsCategoriesExclude :: ListPostsKey (NonEmpty Text)
+  ListPostsTags              :: ListPostsKey (NonEmpty Text)
+  ListPostsTagsExclude       :: ListPostsKey (NonEmpty Text)
   ListPostsSticky            :: ListPostsKey Sticky
 
 deriving instance Eq (ListPostsKey a)
@@ -118,6 +126,30 @@ instance GKey ListPostsKey where
     , This ListPostsSticky
     ]
 
+instance ToQueryParamKey ListPostsKey where
+  toQueryParamKey = toFieldName
+
+instance ToQueryParamKeyValues ListPostsKey Identity where
+  toQueryParamKeyValues ListPostsContext = defaultToQueryParamKeyValues ListPostsContext
+  toQueryParamKeyValues ListPostsPage = defaultToQueryParamKeyValues ListPostsPage
+  toQueryParamKeyValues ListPostsPerPage = defaultToQueryParamKeyValues ListPostsPerPage
+  toQueryParamKeyValues ListPostsSearch = defaultToQueryParamKeyValues ListPostsSearch
+  toQueryParamKeyValues ListPostsAfter = defaultToQueryParamKeyValues ListPostsAfter
+  toQueryParamKeyValues ListPostsAuthor = defaultToQueryParamKeyValues ListPostsAuthor
+  toQueryParamKeyValues ListPostsAuthorExclude = nonEmptyQueryParamKeyValues ListPostsAuthorExclude
+  toQueryParamKeyValues ListPostsBefore = defaultToQueryParamKeyValues ListPostsBefore
+  toQueryParamKeyValues ListPostsExclude = nonEmptyQueryParamKeyValues ListPostsExclude
+  toQueryParamKeyValues ListPostsInclude = nonEmptyQueryParamKeyValues ListPostsInclude
+  toQueryParamKeyValues ListPostsOffset = defaultToQueryParamKeyValues ListPostsOffset
+  toQueryParamKeyValues ListPostsOrder = defaultToQueryParamKeyValues ListPostsOrder
+  toQueryParamKeyValues ListPostsSlug = nonEmptyQueryParamKeyValues ListPostsSlug
+  toQueryParamKeyValues ListPostsStatus = defaultToQueryParamKeyValues ListPostsStatus
+  toQueryParamKeyValues ListPostsCategories = nonEmptyQueryParamKeyValues ListPostsCategories
+  toQueryParamKeyValues ListPostsCategoriesExclude = nonEmptyQueryParamKeyValues ListPostsCategoriesExclude
+  toQueryParamKeyValues ListPostsTags = nonEmptyQueryParamKeyValues ListPostsTags
+  toQueryParamKeyValues ListPostsTagsExclude = nonEmptyQueryParamKeyValues ListPostsTagsExclude
+  toQueryParamKeyValues ListPostsSticky = defaultToQueryParamKeyValues ListPostsSticky
+
 instance Show1 f => ShowTag ListPostsKey f where
   showTaggedPrec ListPostsContext           = showsPrec1
   showTaggedPrec ListPostsPage              = showsPrec1
@@ -160,6 +192,9 @@ instance ToJSON1 f => ToJSONViaKey ListPostsKey f where
   toJSONViaKey ListPostsTagsExclude       = toJSON1
   toJSONViaKey ListPostsSticky            = toJSON1
 
+instance ToJSON1 f => ToJSON (DMap ListPostsKey f) where
+  toJSON = toJSONDMap
+
 instance Eq1 f => EqTag ListPostsKey f where
   eqTagged ListPostsContext ListPostsContext                     = eq1
   eqTagged ListPostsPage ListPostsPage                           = eq1
@@ -187,10 +222,13 @@ data Order =
   | Desc
   deriving (Eq, Show)
 
-instance ToJSON Order where
-  toJSON = \case
+instance ToHttpApiData Order where
+  toQueryParam = \case
     Asc -> "asc"
     Desc -> "desc"
+
+instance ToJSON Order where
+  toJSON = String . toQueryParam
 
 data OrderBy =
     Author

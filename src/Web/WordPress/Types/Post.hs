@@ -1,20 +1,21 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE PolyKinds             #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DuplicateRecordFields      #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PolyKinds                  #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
 
 {-# OPTIONS_GHC -Wno-unused-matches#-}
 
@@ -23,12 +24,12 @@ module Web.WordPress.Types.Post where
 import           Control.Applicative   ((<|>))
 import           Control.Lens          (Getter, to, (^.))
 import           Data.Aeson            (FromJSON (..), ToJSON (..),
-                                        Value (Bool), object, withObject,
-                                        withText, (.:))
+                                        Value (Bool, String), object,
+                                        withObject, withText, (.:))
 import           Data.Aeson.Types      (FromJSON1, Result (..), ToJSON1 (..),
                                         parse, parseJSON1, toJSON1)
 import           Data.Dependent.Map    (DMap)
-import           Data.Dependent.Sum    (ShowTag (..), EqTag (..))
+import           Data.Dependent.Sum    (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
 import           Data.Functor.Identity (Identity)
 import           Data.GADT.Compare.TH  (deriveGCompare, deriveGEq)
@@ -36,9 +37,10 @@ import           Data.GADT.Show.TH     (deriveGShow)
 import           Data.Semigroup        ((<>))
 import           Data.Some             (Some (This))
 import           Data.Text             (Text)
-import qualified Data.Text as T
+import qualified Data.Text             as T
 import           Data.Time             (LocalTime)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
+import           Web.HttpApiData       (ToHttpApiData (toQueryParam))
 
 import           Data.GADT.Aeson       (EqViaKey (..), FromJSONViaKey (..),
                                         GKey (..), ToJSONViaKey (..),
@@ -60,7 +62,7 @@ data PostKey a where
   PostPassword      :: PostKey Text
   PostTitle         :: PostKey (R "title")
   PostContent       :: PostKey (RP "content")
-  PostAuthor        :: PostKey Int
+  PostAuthor        :: PostKey Author
   PostExcerpt       :: PostKey (RP "excerpt")
   PostFeaturedMedia :: PostKey Int
   PostCommentStatus :: PostKey CommentStatus
@@ -190,31 +192,31 @@ instance Show1 f => ShowTag PostKey f where
 
 -- TODO: use TH to get rid of this
 instance Eq1 f => EqTag PostKey f where
-  eqTagged PostDate PostDate          = eq1
-  eqTagged PostDateGmt PostDateGmt       = eq1
-  eqTagged PostGuid PostGuid          = eq1
-  eqTagged PostId PostId            = eq1
-  eqTagged PostLink PostLink          = eq1
-  eqTagged PostModified PostModified      = eq1
-  eqTagged PostModifiedGmt PostModifiedGmt   = eq1
-  eqTagged PostSlug PostSlug          = eq1
-  eqTagged PostStatus PostStatus        = eq1
-  eqTagged PostType PostType          = eq1
-  eqTagged PostPassword PostPassword      = eq1
-  eqTagged PostTitle PostTitle         = eq1
-  eqTagged PostContent PostContent       = eq1
-  eqTagged PostAuthor PostAuthor        = eq1
-  eqTagged PostExcerpt PostExcerpt       = eq1
+  eqTagged PostDate PostDate                   = eq1
+  eqTagged PostDateGmt PostDateGmt             = eq1
+  eqTagged PostGuid PostGuid                   = eq1
+  eqTagged PostId PostId                       = eq1
+  eqTagged PostLink PostLink                   = eq1
+  eqTagged PostModified PostModified           = eq1
+  eqTagged PostModifiedGmt PostModifiedGmt     = eq1
+  eqTagged PostSlug PostSlug                   = eq1
+  eqTagged PostStatus PostStatus               = eq1
+  eqTagged PostType PostType                   = eq1
+  eqTagged PostPassword PostPassword           = eq1
+  eqTagged PostTitle PostTitle                 = eq1
+  eqTagged PostContent PostContent             = eq1
+  eqTagged PostAuthor PostAuthor               = eq1
+  eqTagged PostExcerpt PostExcerpt             = eq1
   eqTagged PostFeaturedMedia PostFeaturedMedia = eq1
   eqTagged PostCommentStatus PostCommentStatus = eq1
-  eqTagged PostPingStatus PostPingStatus    = eq1
-  eqTagged PostFormat PostFormat        = eq1
-  eqTagged PostMeta PostMeta          = eq1
-  eqTagged PostSticky PostSticky        = eq1
-  eqTagged PostTemplate PostTemplate      = eq1
-  eqTagged PostCategories PostCategories    = eq1
-  eqTagged PostTags PostTags          = eq1
-  eqTagged _ _ = \_ _ -> False
+  eqTagged PostPingStatus PostPingStatus       = eq1
+  eqTagged PostFormat PostFormat               = eq1
+  eqTagged PostMeta PostMeta                   = eq1
+  eqTagged PostSticky PostSticky               = eq1
+  eqTagged PostTemplate PostTemplate           = eq1
+  eqTagged PostCategories PostCategories       = eq1
+  eqTagged PostTags PostTags                   = eq1
+  eqTagged _ _                                 = \_ _ -> False
 
 -- TODO: use TH and Symbol to get rid of this
 instance GKey PostKey where
@@ -337,13 +339,16 @@ data Status =
   | Private
   deriving (Eq, Enum, Bounded, Show)
 
-instance ToJSON Status where
-  toJSON = \case
+instance ToHttpApiData Status where
+  toQueryParam  = \case
     Publish -> "publish"
     Future -> "future"
     Draft -> "draft"
     Pending -> "pending"
     Private -> "private"
+
+instance ToJSON Status where
+  toJSON = String . toQueryParam
 
 instance FromJSON Status where
   parseJSON v = case v of
@@ -359,10 +364,13 @@ data CommentStatus =
   | CommentsClosed
   deriving (Eq, Show)
 
-instance ToJSON CommentStatus where
-  toJSON = \case
+instance ToHttpApiData CommentStatus where
+  toQueryParam = \case
     CommentsOpen -> "open"
     CommentsClosed -> "closed"
+
+instance ToJSON CommentStatus where
+  toJSON = String . toQueryParam
 
 instance FromJSON CommentStatus where
   parseJSON v = case v of
@@ -375,10 +383,13 @@ data PingStatus =
   | PingsClosed
   deriving (Eq, Show)
 
-instance ToJSON PingStatus where
-  toJSON = \case
+instance ToHttpApiData PingStatus where
+  toQueryParam = \case
     PingsOpen -> "open"
     PingsClosed -> "closed"
+
+instance ToJSON PingStatus where
+  toJSON = String . toQueryParam
 
 instance FromJSON PingStatus where
   parseJSON v = case v of
@@ -413,8 +424,8 @@ instance FromJSON Format where
     "audio"    -> pure Audio
     _          -> fail $ "Unknown format " <> show v
 
-instance ToJSON Format where
-  toJSON = \case
+instance ToHttpApiData Format where
+  toQueryParam = \case
     Standard -> "standard"
     Aside -> "aside"
     Chat -> "chat"
@@ -426,22 +437,33 @@ instance ToJSON Format where
     Video -> "video"
     Audio -> "audio"
 
+instance ToJSON Format where
+  toJSON = String . toQueryParam
+
 data Context =
     View
   | Edit
   | Embed
   deriving (Eq, Show)
 
-instance ToJSON Context where
-  toJSON = \case
+instance ToHttpApiData Context where
+  toQueryParam = \case
     View -> "view"
     Edit -> "edit"
     Embed -> "embed"
+
+instance ToJSON Context where
+  toJSON = String . toQueryParam
 
 data Sticky =
     Sticky
   | NotSticky
   deriving (Eq, Show)
+
+instance ToHttpApiData Sticky where
+  toQueryParam = \case
+    Sticky -> "true"
+    NotSticky -> "false"
 
 instance ToJSON Sticky where
   toJSON = \case
@@ -569,6 +591,10 @@ instance (KnownSymbol l, FromJSON a) => FromJSON (L l a) where
 
 instance ToJSON a => ToJSON (L l a) where
   toJSON (L a) = toJSON a
+
+newtype Author =
+  Author Int
+  deriving (Eq, Show, ToJSON, FromJSON, ToHttpApiData)
 
 mkCreateR
   :: Text
