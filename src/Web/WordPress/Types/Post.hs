@@ -337,6 +337,7 @@ data Status =
   | Draft
   | Pending
   | Private
+  | Trash
   deriving (Eq, Enum, Bounded, Show)
 
 instance ToHttpApiData Status where
@@ -346,6 +347,7 @@ instance ToHttpApiData Status where
     Draft -> "draft"
     Pending -> "pending"
     Private -> "private"
+    Trash -> "trash"
 
 instance ToJSON Status where
   toJSON = String . toQueryParam
@@ -357,6 +359,7 @@ instance FromJSON Status where
     "draft"   -> pure Draft
     "pending" -> pure Pending
     "private" -> pure Private
+    "trash"   -> pure Trash
     _         -> fail $ "Unknown status " <> show v
 
 data CommentStatus =
