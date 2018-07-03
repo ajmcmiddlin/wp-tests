@@ -12,7 +12,7 @@
 module WordPressTests where
 
 import           Control.Lens                  (filtered, (%~), (&), (^.),
-                                                (^..))
+                                                (^..), folded)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
@@ -31,23 +31,23 @@ import           Data.Time                     (LocalTime (LocalTime),
 import           Servant.API                   (BasicAuthData (BasicAuthData))
 import           Servant.Client                (runClientM, ClientM)
 
-import           Hedgehog                      (Callback (..),
+import           Hedgehog                      (Callback (..), PropertyT, Sequential, Parallel,
                                                 Command (Command),
                                                 Concrete (Concrete),
                                                 HTraversable (htraverse),
                                                 MonadGen, MonadTest, Property,
-                                                Symbolic, Var, annotateShow,
+                                                Symbolic, Var (Var), annotateShow,
                                                 concrete, eval, evalEither,
                                                 evalIO, executeParallel,
                                                 executeSequential, forAll,
-                                                property, test, withRetries,
-                                                (===))
+                                                property, test, withRetries, TestT,
+                                                (===), Gen)
 import qualified Hedgehog.Gen                  as Gen
 import qualified Hedgehog.Range                as Range
 import           Test.Tasty                    (TestTree, testGroup)
 import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Web.WordPress.API             (createPost, getPost, listPosts, listPostsAuth)
+import           Web.WordPress.API             (createPost, getPost, listPosts, listPostsAuth, deletePost)
 import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
 import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
                                                 PostMap, Status (..),
@@ -55,7 +55,7 @@ import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
 
 import           Types                         (Env (..), HasIdentityPosts (..),
                                                 HasPosts (..),
-                                                HasStatePosts (..),
+                                                HasStatePosts (..), varPosts,
                                                 StatePost (..), StatePosts (..),
                                                 WPState (WPState),
                                                 hasKeyMatchingPredicate,
@@ -70,36 +70,52 @@ wordpressTests env =
   , testProperty "parallel" $ propWordpressParallel env
   ]
 
+type GenFn m state exeModel =
+  MonadTest m
+  => [Command Gen m state]
+  -> (forall (v :: * -> *). state v)
+  -> PropertyT IO (exeModel m state)
+
+type ExeFn m state exeModel =
+  (forall (v :: * -> *). state v)
+  -> exeModel m state
+  -> m ()
+
 propWordpress
   :: Env
   -> Property
 propWordpress env@Env{..} =
-  property $ do
-  now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cList, cListAuth, cCreatePost now, cGetPost]
-    initialState = WPState . StatePosts $ []
-  actions <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState commands
-
-  evalIO reset
-  executeSequential initialState actions
+    f :: GenFn m state Sequential
+    f cs s = forAll $ Gen.sequential (Range.linear 1 100) s cs
+  in
+    property $ mkProp env f executeSequential
 
 propWordpressParallel
   :: Env
   -> Property
 propWordpressParallel env@Env{..} =
-  withRetries 10 . property $ do
+  let
+    f :: GenFn m state Parallel
+    f cs s = forAll $ Gen.parallel (Range.linear 1 100) (Range.linear 1 10) s cs
+  in
+    withRetries 10 . property $ mkProp env f executeParallel
+
+mkProp ::
+  Env
+  -> GenFn (TestT IO) WPState exeModel
+  -> ExeFn (TestT IO) WPState exeModel
+  -> PropertyT IO ()
+mkProp env@Env{..} gen exe = do
   now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cList, cListAuth, cCreatePost now, cGetPost]
+    commands = ($ env) <$> [cDeletePost, cList, cListAuth, cCreatePost now, cGetPost]
     initialState = WPState . StatePosts $ []
-  actions <- forAll $
-    Gen.parallel (Range.linear 1 100) (Range.linear 1 10) initialState commands
+  actions <- gen commands initialState
 
   test $ do
     evalIO reset
-    executeParallel initialState actions
+    exe initialState actions
 
 
 --------------------------------------------------------------------------------
@@ -428,6 +444,54 @@ existsPostWithSlug s t =
     isMatchingSlug = any (hasKeyMatchingPredicate PostSlug (== Identity t)) $ s ^. identityPosts
   in
     (not . null $ Identity t) && isMatchingSlug
+
+
+--------------------------------------------------------------------------------
+-- DELETE
+--------------------------------------------------------------------------------
+newtype DeletePost (v :: * -> *) =
+  DeletePost (StatePost v)
+  deriving (Show)
+
+instance HTraversable DeletePost where
+  htraverse f (DeletePost (StatePost pmi (Var pm))) =
+    DeletePost . StatePost pmi . Var <$> f pm
+
+cDeletePost
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     , HasPosts state
+     , HasIdentityPosts state
+     )
+  => Env
+  -> Command n m (state :: (* -> *) -> *)
+cDeletePost env@Env{..} =
+  let
+    exe (DeletePost (StatePost _ pmv)) = do
+      let
+        postId = runIdentity $ concrete pmv DM.! PostId
+        delete = deletePost (auth env) postId
+      evalEither =<< liftIO (runClientM delete servantClient)
+  in
+    Command genDelete exe [
+      Require $ \s (DeletePost sp)->
+        not . null $ s ^.. posts . traverse . filtered (== sp)
+    , Update $ \s (DeletePost dsp) _o ->
+        posts %~ (^.. folded . filtered (/= dsp)) $ s
+    ]
+
+genDelete ::
+  ( MonadGen n
+  , HasPosts state
+  )
+  => state Symbolic
+  -> Maybe (n (DeletePost Symbolic))
+genDelete s =
+  if s ^. posts & not . null
+    then Just . fmap DeletePost $ Gen.element (s ^. posts)
+    else Nothing
+
 
 genLocalTime
   :: MonadGen n
