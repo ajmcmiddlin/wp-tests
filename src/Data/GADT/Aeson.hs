@@ -13,15 +13,12 @@
 
 module Data.GADT.Aeson where
 
-import           Data.Aeson            (FromJSON (..), ToJSON (..), Value,
-                                        object, withObject, (.:?))
+import           Data.Aeson            (Value, object, withObject, (.:?))
 import           Data.Aeson.Types      (FromJSON1, Parser, ToJSON1, toJSON1)
 import           Data.Bool             (bool)
 import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty,
-                                        foldrWithKey, fromList, insert, lookup,
-                                        toList)
-import           Data.Functor.Identity (Identity (Identity))
-import           Data.GADT.Compare     ((:~:) (Refl), GCompare (..), GEq (..),
+                                        insert, toList)
+import           Data.GADT.Compare     ((:~:) (Refl), GEq (..),
                                         GOrdering (..))
 import           Data.Monoid           (First (First, getFirst))
 import           Data.Some             (Some (This))
