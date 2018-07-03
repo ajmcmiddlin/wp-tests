@@ -1,12 +1,15 @@
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE DataKinds                 #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE KindSignatures            #-}
+{-# LANGUAGE LambdaCase                #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE StandaloneDeriving        #-}
+{-# LANGUAGE TemplateHaskell           #-}
+{-# LANGUAGE TupleSections             #-}
 
 {-# OPTIONS_GHC -Wno-unused-matches#-}
 
@@ -31,8 +34,7 @@ import           Data.GADT.Aeson          (GKey (..), ToJSONViaKey (..),
 import           Servant.QueryParamMap    (ToQueryParamKey (..),
                                            ToQueryParamKeyValues (..),
                                            defaultToQueryParamKeyValues,
-                                           nonEmptyQueryParamKeyValues,
-                                           toQueryParam1)
+                                           nonEmptyQueryParamKeyValues)
 import           Web.WordPress.Types.Post (Author, Context, Status, Sticky)
 
 type ListPostsMap = DMap ListPostsKey Identity

@@ -29,7 +29,7 @@ import           Data.Time                     (LocalTime (LocalTime),
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
-import           Servant.Client                (runClientM)
+import           Servant.Client                (runClientM, ClientM)
 
 import           Hedgehog                      (Callback (..),
                                                 Command (Command),
@@ -47,7 +47,7 @@ import qualified Hedgehog.Range                as Range
 import           Test.Tasty                    (TestTree, testGroup)
 import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Web.WordPress.API             (createPost, getPost, listPosts)
+import           Web.WordPress.API             (createPost, getPost, listPosts, listPostsAuth)
 import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
 import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
                                                 PostMap, Status (..),
@@ -77,7 +77,7 @@ propWordpress env@Env{..} =
   property $ do
   now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cListPosts, cCreatePost now, cGetPost]
+    commands = ($ env) <$> [cList, cListAuth, cCreatePost now, cGetPost]
     initialState = WPState . StatePosts $ []
   actions <- forAll $
     Gen.sequential (Range.linear 1 100) initialState commands
@@ -92,7 +92,7 @@ propWordpressParallel env@Env{..} =
   withRetries 10 . property $ do
   now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cListPosts, cCreatePost now, cGetPost]
+    commands = ($ env) <$> [cList, cListAuth, cCreatePost now, cGetPost]
     initialState = WPState . StatePosts $ []
   actions <- forAll $
     Gen.parallel (Range.linear 1 100) (Range.linear 1 10) initialState commands
@@ -124,29 +124,42 @@ instance HTraversable ListPosts where
   htraverse f (ListPosts dmv dmi) =
     ListPosts <$> htraverseDmap f dmv <*> pure dmi
 
-cListPosts
-  :: ( MonadGen n
-     , MonadIO m
+cList, cListAuth ::
+  ( MonadGen n
+  , MonadIO m
+  , MonadTest m
+  , HasIdentityPosts state
+  , HasStatePosts state
+  )
+  => Env
+  -> Command n m state
+cList = mkCListPosts (Just . genList) (const listPosts)
+cListAuth = mkCListPosts (Just . genListAuth) listPostsAuth
+
+mkCListPosts
+  :: ( MonadIO m
      , MonadTest m
      , HasIdentityPosts state
      , HasStatePosts state
      )
-  => Env
+  => (state Symbolic -> Maybe (n (ListPosts Symbolic)))
+  -> (BasicAuthData -> ListPostsMap -> ClientM [PostMap])
+  -> Env
   -> Command n m state
-cListPosts Env{..} =
+mkCListPosts gen list env@Env{..} =
   let
     lup :: a -> ListPostsKey a -> ListPostsMap -> a
     lup def key = maybe def runIdentity . DM.lookup key
 
     lupPerPage = lup 10 ListPostsPerPage
 
-    gen = Just . genList
     exe (ListPosts dmv dmi) =
       let
         dmi' = DM.map (\(Concrete a) -> pure a) dmv
         dm = DM.union dmi' dmi
+        l = list (auth env) dm
       in
-        evalEither =<< liftIO (runClientM (listPosts dm) servantClient)
+        evalEither =<< liftIO (runClientM l servantClient)
   in
     Command gen exe [
       Require $ \s (ListPosts _ lpi) ->
@@ -171,6 +184,25 @@ genList
   => state Symbolic
   -> n (ListPosts v)
 genList s = do
+  status <- Gen.enumBounded
+  perPage <- Gen.int (Range.linear 1 100)
+  let
+    numPosts = length $ postsWithStatus s status
+    numPages' = numPages numPosts perPage
+  page <- Gen.int (Range.linear 1 numPages')
+  pure . ListPosts DM.empty $ DM.fromList [
+      --ListPostsStatus ==> status
+    ListPostsPerPage ==> perPage
+    , ListPostsPage ==> page
+    ]
+
+genListAuth
+  :: ( MonadGen n
+     , HasIdentityPosts state
+     )
+  => state Symbolic
+  -> n (ListPosts v)
+genListAuth s = do
   status <- Gen.enumBounded
   perPage <- Gen.int (Range.linear 1 100)
   let

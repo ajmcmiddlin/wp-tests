@@ -18,19 +18,23 @@ import           Web.WordPress.YoloContent     (YoloJSON)
 
 type Posts =
   "posts" :>
-  (    QueryParamMap ListPostsKey Identity :> Get '[JSON, YoloJSON] [PostMap]
+  (    List
+  :<|> BasicAuth "wordpress" () :> List
   :<|> BasicAuth "wordpress" () :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
   :<|> BasicAuth "wordpress" () :> Capture "id" Int :> Get '[JSON] PostMap
   :<|> BasicAuth "wordpress" () :> Capture "id" Int :> Delete '[JSON] PostMap
   )
 
+type List = QueryParamMap ListPostsKey Identity :> Get '[JSON, YoloJSON] [PostMap]
+
 postsAPI :: Proxy Posts
 postsAPI = Proxy
 
 listPosts :: ListPostsMap -> ClientM [PostMap]
+listPostsAuth :: BasicAuthData -> ListPostsMap -> ClientM [PostMap]
 createPost :: BasicAuthData -> PostMap -> ClientM PostMap
 getPost :: BasicAuthData -> Int -> ClientM PostMap
 deletePost :: BasicAuthData -> Int -> ClientM PostMap
 
-(listPosts :<|> createPost :<|> getPost :<|> deletePost) =
+(listPosts :<|> listPostsAuth :<|> createPost :<|> getPost :<|> deletePost) =
   client postsAPI
