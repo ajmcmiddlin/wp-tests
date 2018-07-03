@@ -401,7 +401,7 @@ genCreate now s = do
         -- We don't want empty slugs because then WordPress defaults them and we can't be
         -- certain about when things should be equal without implementing their defaulting logic.
       , PostSlug :=> Gen.filter (not . existsPostWithSlug s) (genAlpha 1 300)
-      , PostStatus :=> Gen.enumBounded
+      , PostStatus :=> Gen.filter (/= Trash) Gen.enumBounded
      -- , PostPassword
       , PostTitle :=> mkCreateR <$> genAlpha 1 30
       , PostContent :=> pure (mkCreatePR content)
