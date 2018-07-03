@@ -55,7 +55,7 @@ import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
 
 import           Types                         (Env (..), HasIdentityPosts (..),
                                                 HasPosts (..),
-                                                HasStatePosts (..), varPosts,
+                                                HasStatePosts (..),
                                                 StatePost (..), StatePosts (..),
                                                 WPState (WPState),
                                                 hasKeyMatchingPredicate,
@@ -462,7 +462,6 @@ cDeletePost
      , MonadIO m
      , MonadTest m
      , HasPosts state
-     , HasIdentityPosts state
      )
   => Env
   -> Command n m (state :: (* -> *) -> *)

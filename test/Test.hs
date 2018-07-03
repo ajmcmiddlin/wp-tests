@@ -1,30 +1,22 @@
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-import           Control.Exception        (bracket)
-import           Data.ByteString          (ByteString)
 import qualified Data.ByteString.Char8    as BS8
 import qualified Data.Dependent.Map       as DM
-import           Data.Foldable            (traverse_)
 import           Data.Functor             (void)
 import           Data.Semigroup           ((<>))
-import           Database.MySQL.Base      (Connection, close, connect,
-                                           connectDatabase, connectHost,
+import           Database.MySQL.Base      (connectDatabase, connectHost,
                                            connectPassword, connectUser,
-                                           defaultConnectInfo, query)
+                                           defaultConnectInfo)
 import           Network.HTTP.Client      (defaultManagerSettings, newManager)
 import           Servant.Client           (BaseUrl (..), ClientEnv (ClientEnv),
-                                           Scheme (Http), ServantError,
-                                           runClientM)
+                                           Scheme (Http))
 import           System.Environment       (getEnv)
 import           System.Process           (readProcess)
 
-import           Test.Tasty               (TestTree, defaultMain, testGroup)
+import           Test.Tasty               (defaultMain, testGroup)
 
 import           Types                    (Env (..))
-import           Web.WordPress.API        (listPosts)
-import           Web.WordPress.Types.Post (PostMap)
 import           WordPressTests           (wordpressTests)
 
 main :: IO ()

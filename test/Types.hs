@@ -8,7 +8,6 @@ import           Control.Lens             (Getter, Lens', lens, to)
 import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
-import           Data.Functor.Classes  (Eq1, eq1)
 import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
 import           Web.WordPress.Types.Post (PostMap)
