@@ -5,23 +5,30 @@
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE MultiWayIf                #-}
+{-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE StandaloneDeriving        #-}
 
 module WordPressTests where
 
-import           Control.Lens                  (filtered, folded, (%~), (&),
-                                                (.~), (^.), (^..))
+import           Control.Lens                  (at, filtered, folded, ix, sans,
+                                                to, (%~), (&), (.~), (<&>),
+                                                (^.), (^..), (^?), _Just,
+                                                _Wrapped)
+-- import           Control.Lens.Extras           (is)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
 import           Data.Dependent.Map            (DMap)
 import qualified Data.Dependent.Map            as DM
-import           Data.Dependent.Map.Lens       (dmat)
+import           Data.Dependent.Map.Lens       (dmix)
 import           Data.Dependent.Sum            (DSum (..), (==>))
-import           Data.Functor.Classes          (Eq1)
+import           Data.Functor.Classes          (Eq1, Ord1)
 import           Data.Functor.Identity         (Identity (..))
+import qualified Data.Map                      as M
+import           Data.Maybe                    (isJust)
+import           Data.Semigroup                ((<>))
 import qualified Data.Text                     as T
 import           Data.Time                     (LocalTime (LocalTime),
                                                 diffUTCTime, fromGregorian,
@@ -57,13 +64,13 @@ import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
                                                 PostMap, Status (..),
                                                 mkCreatePR, mkCreateR)
 
-import           Types                         (Env (..), HasIdentityPosts (..),
+import           Types                         (Env (..), HasPostMaps (..),
                                                 HasPosts (..),
                                                 HasStatePosts (..),
-                                                StatePost (..), StatePosts (..),
+                                                StatePosts (..),
                                                 WPState (WPState),
                                                 hasKeyMatchingPredicate,
-                                                smooshStatePost, identityPost)
+                                                postMap)
 
 wordpressTests
   :: Env
@@ -114,7 +121,7 @@ mkProp env@Env{..} gen exe = do
   now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
     commands = ($ env) <$> [cDeletePost, cList, cListAuth, cCreatePost now, cGetPost]
-    initialState = WPState . StatePosts $ []
+    initialState = WPState . StatePosts $ M.empty
   actions <- gen commands initialState
 
   test $ do
@@ -148,7 +155,7 @@ cList, cListAuth ::
   ( MonadGen n
   , MonadIO m
   , MonadTest m
-  , HasIdentityPosts state
+  , HasPostMaps state
   , HasStatePosts state
   )
   => Env
@@ -159,7 +166,7 @@ cListAuth = mkCListPosts (Just . genListAuth) listPostsAuth
 mkCListPosts
   :: ( MonadIO m
      , MonadTest m
-     , HasIdentityPosts state
+     , HasPostMaps state
      , HasStatePosts state
      )
   => (state Symbolic -> Maybe (n (ListPosts Symbolic)))
@@ -199,7 +206,7 @@ mkCListPosts gen list env@Env{..} =
 
 genList
   :: ( MonadGen n
-     , HasIdentityPosts state
+     , HasPostMaps state
      )
   => state Symbolic
   -> n (ListPosts v)
@@ -211,40 +218,31 @@ genList s = do
     numPages' = numPages numPosts perPage
   page <- Gen.int (Range.linear 1 numPages')
   pure . ListPosts DM.empty $ DM.fromList [
-      --ListPostsStatus ==> status
-    ListPostsPerPage ==> perPage
+      ListPostsPerPage ==> perPage
     , ListPostsPage ==> page
     ]
 
 genListAuth
   :: ( MonadGen n
-     , HasIdentityPosts state
+     , HasPostMaps state
      )
   => state Symbolic
   -> n (ListPosts v)
 genListAuth s = do
   status <- Gen.enumBounded
-  perPage <- Gen.int (Range.linear 1 100)
-  let
-    numPosts = length $ postsWithStatus s status
-    numPages' = numPages numPosts perPage
-  page <- Gen.int (Range.linear 1 numPages')
-  pure . ListPosts DM.empty $ DM.fromList [
-      ListPostsStatus ==> status
-    , ListPostsPerPage ==> perPage
-    , ListPostsPage ==> page
-    ]
+  (ListPosts dmv dmi) <- genList s
+  pure . ListPosts dmv $ DM.insert ListPostsStatus status dmi
 
 postsWhere
-  :: HasIdentityPosts state
+  :: HasPostMaps state
   => state v
   -> (PostMap -> Bool)
   -> [PostMap]
 postsWhere s p =
-  s ^.. identityPosts . traverse . filtered p
+  s ^.. postMaps . traverse . filtered p
 
 postsWithStatus
-  :: HasIdentityPosts state
+  :: HasPostMaps state
   => state v
   -> Status
   -> [PostMap]
@@ -262,7 +260,7 @@ numPages numPosts perPage =
 -- GET
 --------------------------------------------------------------------------------
 newtype GetPost (v :: * -> *) =
-  GetPost (StatePost v)
+  GetPost (Var Int v)
   deriving (Show)
 
 instance HTraversable GetPost where
@@ -281,24 +279,23 @@ cGetPost env@Env{..} =
   let
     gen s =
       if s ^. posts & (not . null)
-      then Just $ GetPost <$> (s ^. posts & Gen.element)
+      then Just $ GetPost <$> (s ^. posts . to M.keys & Gen.element)
       else Nothing
-    exe (GetPost (StatePost _ dmv)) = do
-      postId <- eval . runIdentity $ concrete dmv DM.! PostId
-      evalEither =<< liftIO (runClientM (getPost (auth env) postId) servantClient)
+    exe (GetPost varId) = do
+      let
+        get = getPost (auth env) (concrete varId)
+      evalEither =<< liftIO (runClientM get servantClient)
   in
     Command gen exe [
-      Require $ \s (GetPost sp) ->
-        (s ^.. posts . traverse . filtered (== sp)) & not . null
-    , Ensure $ \_so _sn (GetPost sp) p -> do
+      Require $ \s (GetPost varId) ->
+        s ^. posts . at varId & not . null
+    , Ensure $ \_so sn (GetPost varId) p -> do
+        stateMap <- eval $ (sn ^. posts) M.! varId
         let
-          pState = smooshStatePost sp
-
-          sp' = DM.union pState p
-          p' = DM.union p sp'
-        annotateShow sp
+          pState = DM.intersection p stateMap
+        annotateShow stateMap
         annotateShow p
-        sp' === p'
+        stateMap === pState
     ]
 
 
@@ -318,7 +315,7 @@ cCreatePost
      , MonadIO m
      , MonadTest m
      , HasPosts state
-     , HasIdentityPosts state
+     , HasPostMaps state
      )
   => LocalTime
   -> Env
@@ -329,26 +326,23 @@ cCreatePost now env@Env{..} =
     exe (CreatePost pm) = do
       annotateShow pm
       annotateShow $ encode pm
-      evalEither =<< liftIO (runClientM (createPost (auth env) pm) servantClient)
+      let create = runIdentity . (DM.! PostId) <$> createPost (auth env) pm
+      evalEither =<< liftIO (runClientM create servantClient)
   in
     Command gen exe [
       Update $ \s cp o ->
-        posts %~ (createToStatePost now cp o :) $ s
+        posts . ix o .~ createToStatePost now cp $ s
     ]
 
 createToStatePost ::
   LocalTime
   -> CreatePost v
-  -> Var PostMap v
-  -> StatePost v
-createToStatePost now (CreatePost pm) pmo = do
-  let
-    pmi =
-      foldr ($) pm [
-        fixCreateStatus now
-      , fixSlug
-      ]
-  StatePost pmi pmo
+  -> PostMap
+createToStatePost now (CreatePost pm) =
+  foldr ($) pm [
+      fixCreateStatus now
+    , fixSlug
+    ]
 
 fixCreateStatus ::
   LocalTime
@@ -383,7 +377,7 @@ fixSlug pm =
 
 genCreate ::
   ( MonadGen n
-  , HasIdentityPosts state
+  , HasPostMaps state
   )
   => LocalTime
   -> state (v :: * -> *)
@@ -439,13 +433,13 @@ withinADay a b =
     abs (diffUTCTime a' b') < nominalDay
 
 existsPostWithSlug ::
-  HasIdentityPosts state
+  HasPostMaps state
   => state v
   -> T.Text
   -> Bool
 existsPostWithSlug s t =
   let
-    isMatchingSlug = any (hasKeyMatchingPredicate PostSlug (== Identity t)) $ s ^. identityPosts
+    isMatchingSlug = any (hasKeyMatchingPredicate PostSlug (== Identity t)) $ s ^. postMaps
   in
     (not . null $ Identity t) && isMatchingSlug
 
@@ -454,12 +448,12 @@ existsPostWithSlug s t =
 -- DELETE
 --------------------------------------------------------------------------------
 data DeletePost (v :: * -> *) =
-  DeletePost (StatePost v) (Maybe Bool)
+  DeletePost (Var Int v) (Maybe Bool)
   deriving (Show)
 
 instance HTraversable DeletePost where
-  htraverse f (DeletePost (StatePost pmi (Var pm)) force) =
-    ($ force) . DeletePost . StatePost pmi . Var <$> f pm
+  htraverse f (DeletePost (Var postId) force) =
+    ($ force) . DeletePost . Var <$> f postId
 
 cDeletePost
   :: ( MonadGen n
@@ -471,19 +465,24 @@ cDeletePost
   -> Command n m (state :: (* -> *) -> *)
 cDeletePost env@Env{..} =
   let
-    exe (DeletePost (StatePost _ pmv) force) = do
+    exe (DeletePost varId force) = do
       let
-        postId = runIdentity $ concrete pmv DM.! PostId
-        delete = deletePost (auth env) postId force
+        delete = deletePost (auth env) (concrete varId) force
       evalEither =<< liftIO (runClientM delete servantClient)
   in
     Command genDelete exe [
-      Require $ \s (DeletePost sp _force)->
-        not . null $ s ^.. posts . traverse . filtered (== sp)
-    , Update $ \s (DeletePost dsp forced) _o ->
+      Require $ \s (DeletePost varId _force) ->
+        let
+          postExists = s ^. posts . at varId & isJust
+          postNotTrash = postFieldAt s PostStatus varId /= Just Trash
+        in
+          postExists && postNotTrash
+    , Update $ \s (DeletePost varId forced) _o ->
         case forced of
-          Just True -> posts %~ (^.. folded . filtered (/= dsp)) $ s
-          _ -> posts . traverse . filtered (== dsp) . identityPost . dmat PostStatus .~ Just (Identity Trash) $ s
+          Just True -> posts %~ sans varId $ s
+          _ ->
+            (posts . ix varId . dmix PostSlug . _Wrapped %~ (<> "__trashed"))
+            . (posts . ix varId . dmix PostStatus . _Wrapped .~ Trash) $ s
     ]
 
 genDelete ::
@@ -493,9 +492,24 @@ genDelete ::
   => state Symbolic
   -> Maybe (n (DeletePost Symbolic))
 genDelete s =
-  if s ^. posts & not . null
-    then Just $ DeletePost <$> Gen.element (s ^. posts) <*> Gen.maybe Gen.bool
-    else Nothing
+  let
+    genId = Gen.element (s ^. posts . to M.keys)
+    genIdNotTrash = Gen.filter ((/= Just Trash) . postFieldAt s PostStatus) genId
+  in
+    if s ^. posts & not . null
+      then Just $ DeletePost <$> genIdNotTrash <*> Gen.maybe Gen.bool
+      else Nothing
+
+postFieldAt ::
+  ( HasPosts state
+  , Ord1 v
+  )
+  => state v
+  -> PostKey a
+  -> Var Int v
+  -> Maybe a
+postFieldAt s key varId  =
+  s ^? posts . ix varId . dmix key . _Wrapped
 
 genLocalTime
   :: MonadGen n
