@@ -331,7 +331,7 @@ cCreatePost now env@Env{..} =
   in
     Command gen exe [
       Update $ \s cp o ->
-        posts . ix o .~ createToStatePost now cp $ s
+        posts . at o .~ Just (createToStatePost now cp) $ s
     ]
 
 createToStatePost ::
