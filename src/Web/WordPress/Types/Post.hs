@@ -19,7 +19,27 @@
 
 {-# OPTIONS_GHC -Wno-unused-matches#-}
 
-module Web.WordPress.Types.Post where
+module Web.WordPress.Types.Post
+  (
+  -- * Key type
+    PostKey (..)
+
+  -- * Map type synonym
+  , PostMap
+
+  -- * Field types
+  , Status (..)
+  , CommentStatus (..)
+  -- Don't export a Slug constructor -- force use of `mkSlug`
+  , Slug
+  , mkSlug
+  , trashSlug
+  , Author (..)
+  , Context (..)
+  , Sticky (..)
+  , mkCreatePR
+  , mkCreateR
+  ) where
 
 import           Control.Applicative   ((<|>))
 import           Control.Lens          (Getter, to, (^.))
@@ -56,7 +76,7 @@ data PostKey a where
   PostLink          :: PostKey Text
   PostModified      :: PostKey LocalTime
   PostModifiedGmt   :: PostKey LocalTime
-  PostSlug          :: PostKey Text
+  PostSlug          :: PostKey Slug
   PostStatus        :: PostKey Status
   PostType          :: PostKey Text
   PostPassword      :: PostKey Text
@@ -598,6 +618,26 @@ instance ToJSON a => ToJSON (L l a) where
 newtype Author =
   Author Int
   deriving (Eq, Show, ToJSON, FromJSON, ToHttpApiData)
+
+newtype Slug =
+  Slug Text
+  deriving (Eq, Show, ToJSON, FromJSON, ToHttpApiData)
+
+maxSlugLength :: Int
+maxSlugLength = 200
+
+mkSlug ::
+  Text
+  -> Slug
+mkSlug t =
+  Slug . T.toLower $ T.take maxSlugLength t
+
+trashSlug ::
+  Slug
+  -> Slug
+trashSlug (Slug t) =
+  let suffix = "__trashed"
+   in Slug . (<> suffix) $ T.take (maxSlugLength - T.length suffix) t
 
 mkCreateR
   :: Text
