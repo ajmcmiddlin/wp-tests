@@ -12,10 +12,9 @@
 
 module WordPressTests where
 
-import           Control.Lens                  (at, filtered, folded, ix, sans,
-                                                to, (%~), (&), (.~), (<&>),
-                                                (^.), (^..), (^?), _Just,
-                                                _Wrapped)
+import           Control.Lens                  (at, filtered, ix, sans, to,
+                                                (%~), (&), (.~), (?~), (^.),
+                                                (^..), (^?), _Wrapped)
 -- import           Control.Lens.Extras           (is)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
@@ -331,7 +330,7 @@ cCreatePost now env@Env{..} =
   in
     Command gen exe [
       Update $ \s cp o ->
-        posts . at o .~ Just (createToStatePost now cp) $ s
+        posts . at o ?~ createToStatePost now cp $ s
     ]
 
 createToStatePost ::
