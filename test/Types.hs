@@ -36,6 +36,9 @@ class HasIdentityPosts (s :: (* -> *) -> *) where
 class HasVarPosts (s :: (* -> *) -> *) where
   varPosts :: Getter (s v) [Var PostMap v]
 
+class HasIdentityPost (s :: (* -> *) -> *) where
+  identityPost :: Lens' (s v) PostMap
+
 
 newtype WPState (v :: * -> *) =
   WPState
@@ -72,12 +75,19 @@ instance HasVarPosts StatePosts where
 
 
 data StatePost v =
-  StatePost PostMap (Var PostMap v)
+  StatePost
+  { idPost :: PostMap
+  , varPost :: Var PostMap v
+  }
   deriving (Eq, Show)
 
 instance HTraversable StatePost where
   htraverse f (StatePost dmi dmv) =
     StatePost dmi <$> htraverse f dmv
+
+instance HasIdentityPost StatePost where
+  identityPost =
+    lens idPost (\s ip -> s {idPost = ip})
 
 smooshStatePost
   :: StatePost Concrete

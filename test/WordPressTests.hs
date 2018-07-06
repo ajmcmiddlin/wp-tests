@@ -11,13 +11,14 @@
 
 module WordPressTests where
 
-import           Control.Lens                  (filtered, (%~), (&), (^.),
-                                                (^..), folded)
+import           Control.Lens                  (filtered, folded, (%~), (&),
+                                                (.~), (^.), (^..))
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
 import           Data.Dependent.Map            (DMap)
 import qualified Data.Dependent.Map            as DM
+import           Data.Dependent.Map.Lens       (dmat)
 import           Data.Dependent.Sum            (DSum (..), (==>))
 import           Data.Functor.Classes          (Eq1)
 import           Data.Functor.Identity         (Identity (..))
@@ -29,25 +30,28 @@ import           Data.Time                     (LocalTime (LocalTime),
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
-import           Servant.Client                (runClientM, ClientM)
+import           Servant.Client                (ClientM, runClientM)
 
-import           Hedgehog                      (Callback (..), PropertyT, Sequential, Parallel,
+import           Hedgehog                      (Callback (..),
                                                 Command (Command),
-                                                Concrete (Concrete),
+                                                Concrete (Concrete), Gen,
                                                 HTraversable (htraverse),
-                                                MonadGen, MonadTest, Property,
-                                                Symbolic, Var (Var), annotateShow,
-                                                concrete, eval, evalEither,
-                                                evalIO, executeParallel,
+                                                MonadGen, MonadTest, Parallel,
+                                                Property, PropertyT, Sequential,
+                                                Symbolic, TestT, Var (Var),
+                                                annotateShow, concrete, eval,
+                                                evalEither, evalIO,
+                                                executeParallel,
                                                 executeSequential, forAll,
-                                                property, test, withRetries, TestT,
-                                                (===), Gen)
+                                                property, test, withRetries,
+                                                (===))
 import qualified Hedgehog.Gen                  as Gen
 import qualified Hedgehog.Range                as Range
 import           Test.Tasty                    (TestTree, testGroup)
 import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Web.WordPress.API             (createPost, getPost, listPosts, listPostsAuth, deletePost)
+import           Web.WordPress.API             (createPost, deletePost, getPost,
+                                                listPosts, listPostsAuth)
 import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
 import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
                                                 PostMap, Status (..),
@@ -59,7 +63,7 @@ import           Types                         (Env (..), HasIdentityPosts (..),
                                                 StatePost (..), StatePosts (..),
                                                 WPState (WPState),
                                                 hasKeyMatchingPredicate,
-                                                smooshStatePost)
+                                                smooshStatePost, identityPost)
 
 wordpressTests
   :: Env
@@ -449,13 +453,13 @@ existsPostWithSlug s t =
 --------------------------------------------------------------------------------
 -- DELETE
 --------------------------------------------------------------------------------
-newtype DeletePost (v :: * -> *) =
-  DeletePost (StatePost v)
+data DeletePost (v :: * -> *) =
+  DeletePost (StatePost v) (Maybe Bool)
   deriving (Show)
 
 instance HTraversable DeletePost where
-  htraverse f (DeletePost (StatePost pmi (Var pm))) =
-    DeletePost . StatePost pmi . Var <$> f pm
+  htraverse f (DeletePost (StatePost pmi (Var pm)) force) =
+    ($ force) . DeletePost . StatePost pmi . Var <$> f pm
 
 cDeletePost
   :: ( MonadGen n
@@ -467,17 +471,19 @@ cDeletePost
   -> Command n m (state :: (* -> *) -> *)
 cDeletePost env@Env{..} =
   let
-    exe (DeletePost (StatePost _ pmv)) = do
+    exe (DeletePost (StatePost _ pmv) force) = do
       let
         postId = runIdentity $ concrete pmv DM.! PostId
-        delete = deletePost (auth env) postId
+        delete = deletePost (auth env) postId force
       evalEither =<< liftIO (runClientM delete servantClient)
   in
     Command genDelete exe [
-      Require $ \s (DeletePost sp)->
+      Require $ \s (DeletePost sp _force)->
         not . null $ s ^.. posts . traverse . filtered (== sp)
-    , Update $ \s (DeletePost dsp) _o ->
-        posts %~ (^.. folded . filtered (/= dsp)) $ s
+    , Update $ \s (DeletePost dsp forced) _o ->
+        case forced of
+          Just True -> posts %~ (^.. folded . filtered (/= dsp)) $ s
+          _ -> posts . traverse . filtered (== dsp) . identityPost . dmat PostStatus .~ Just (Identity Trash) $ s
     ]
 
 genDelete ::
@@ -488,9 +494,8 @@ genDelete ::
   -> Maybe (n (DeletePost Symbolic))
 genDelete s =
   if s ^. posts & not . null
-    then Just . fmap DeletePost $ Gen.element (s ^. posts)
+    then Just $ DeletePost <$> Gen.element (s ^. posts) <*> Gen.maybe Gen.bool
     else Nothing
-
 
 genLocalTime
   :: MonadGen n

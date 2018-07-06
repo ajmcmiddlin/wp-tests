@@ -22,7 +22,7 @@ type Posts =
   :<|> BasicAuth "wordpress" () :> List
   :<|> BasicAuth "wordpress" () :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
   :<|> BasicAuth "wordpress" () :> Capture "id" Int :> Get '[JSON] PostMap
-  :<|> BasicAuth "wordpress" () :> QueryParam "force" Bool :> Capture "id" Int :> Delete '[JSON] PostMap
+  :<|> BasicAuth "wordpress" () :> Capture "id" Int :> QueryParam "force" Bool :> Delete '[JSON] PostMap
   )
 
 type List = QueryParamMap ListPostsKey Identity :> Get '[JSON, YoloJSON] [PostMap]
@@ -34,7 +34,7 @@ listPosts :: ListPostsMap -> ClientM [PostMap]
 listPostsAuth :: BasicAuthData -> ListPostsMap -> ClientM [PostMap]
 createPost :: BasicAuthData -> PostMap -> ClientM PostMap
 getPost :: BasicAuthData -> Int -> ClientM PostMap
-deletePost :: BasicAuthData -> Maybe Bool -> Int -> ClientM PostMap
+deletePost :: BasicAuthData -> Int -> Maybe Bool -> ClientM PostMap
 
 (listPosts :<|> listPostsAuth :<|> createPost :<|> getPost :<|> deletePost) =
   client postsAPI
