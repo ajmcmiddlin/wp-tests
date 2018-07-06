@@ -480,8 +480,8 @@ cDeletePost env@Env{..} =
         case forced of
           Just True -> posts %~ sans varId $ s
           _ ->
-            (posts . ix varId . dmix PostSlug . _Wrapped %~ (<> "__trashed"))
-            . (posts . ix varId . dmix PostStatus . _Wrapped .~ Trash) $ s
+            (posts . at varId . _Just . dmix PostSlug . _Wrapped %~ trashSlug )
+            . (posts . at varId . _Just . dmix PostStatus . _Wrapped .~ Trash) $ s
     ]
 
 genDelete ::
