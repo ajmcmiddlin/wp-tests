@@ -481,6 +481,7 @@ cDeletePost env@Env{..} =
         case forced of
           Just True -> posts %~ sans varId $ s
           _ ->
+            -- TODO extract the optic for the field
             (posts . ix varId . dmix PostSlug . _Wrapped %~ (<> "__trashed"))
             . (posts . ix varId . dmix PostStatus . _Wrapped .~ Trash) $ s
     ]
