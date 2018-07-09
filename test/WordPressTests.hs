@@ -12,11 +12,9 @@
 
 module WordPressTests where
 
-import           Control.Lens                  (at, filtered, folded, ix, sans,
-                                                to, (%~), (&), (.~), (<&>),
-                                                (^.), (^..), (^?), _Just,
-                                                _Wrapped)
--- import           Control.Lens.Extras           (is)
+import           Control.Lens                  (at, filtered, ix, sans, to,
+                                                (%~), (&), (.~), (?~), (^.),
+                                                (^..), (^?), _Wrapped, _Just)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
@@ -61,7 +59,7 @@ import           Web.WordPress.API             (createPost, deletePost, getPost,
                                                 listPosts, listPostsAuth)
 import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
 import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
-                                                PostMap, Status (..),
+                                                PostMap, Status (..), trashSlug, mkSlug, Slug,
                                                 mkCreatePR, mkCreateR)
 
 import           Types                         (Env (..), HasPostMaps (..),
@@ -331,7 +329,7 @@ cCreatePost now env@Env{..} =
   in
     Command gen exe [
       Update $ \s cp o ->
-        posts . ix o .~ createToStatePost now cp $ s
+        posts . at o ?~ createToStatePost now cp $ s
     ]
 
 createToStatePost ::
@@ -341,7 +339,6 @@ createToStatePost ::
 createToStatePost now (CreatePost pm) =
   foldr ($) pm [
       fixCreateStatus now
-    , fixSlug
     ]
 
 fixCreateStatus ::
@@ -366,15 +363,6 @@ fixCreateStatus now pm =
         DM.insert PostStatus status pm
     Nothing -> pm
 
-fixSlug ::
-  PostMap
-  -> PostMap
-fixSlug pm =
-  case DM.lookup PostSlug pm of
-    -- TODO: make a slug newtype and smart constructor to take care of all this
-    Just s  -> DM.insert PostSlug (T.take 200 . T.toLower <$> s) pm
-    Nothing -> pm
-
 genCreate ::
   ( MonadGen n
   , HasPostMaps state
@@ -394,11 +382,12 @@ genCreate now s = do
       then Gen.filter (not . withinADay now) genLocalTime
       else genLocalTime
     excerpt = bool content excerpt' (T.null excerpt')
+    genSlug = Gen.filter (not . existsPostWithSlug s) . fmap mkSlug $ genAlpha 1 300
     gensI = [
         PostDateGmt :=> genDate
         -- We don't want empty slugs because then WordPress defaults them and we can't be
         -- certain about when things should be equal without implementing their defaulting logic.
-      , PostSlug :=> Gen.filter (not . existsPostWithSlug s) (genAlpha 1 300)
+      , PostSlug :=> genSlug
       , PostStatus :=> Gen.filter (/= Trash) Gen.enumBounded
      -- , PostPassword
       , PostTitle :=> mkCreateR <$> genAlpha 1 30
@@ -435,13 +424,13 @@ withinADay a b =
 existsPostWithSlug ::
   HasPostMaps state
   => state v
-  -> T.Text
+  -> Slug
   -> Bool
-existsPostWithSlug s t =
+existsPostWithSlug s slug =
   let
-    isMatchingSlug = any (hasKeyMatchingPredicate PostSlug (== Identity t)) $ s ^. postMaps
+    isMatchingSlug = any (hasKeyMatchingPredicate PostSlug (== Identity slug)) $ s ^. postMaps
   in
-    (not . null $ Identity t) && isMatchingSlug
+    (not . null $ Identity slug) && isMatchingSlug
 
 
 --------------------------------------------------------------------------------
@@ -482,8 +471,8 @@ cDeletePost env@Env{..} =
           Just True -> posts %~ sans varId $ s
           _ ->
             -- TODO extract the optic for the field
-            (posts . ix varId . dmix PostSlug . _Wrapped %~ (<> "__trashed"))
-            . (posts . ix varId . dmix PostStatus . _Wrapped .~ Trash) $ s
+            (posts . at varId . _Just . dmix PostSlug . _Wrapped %~ trashSlug )
+            . (posts . at varId . _Just . dmix PostStatus . _Wrapped .~ Trash) $ s
     ]
 
 genDelete ::
