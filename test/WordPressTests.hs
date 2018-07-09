@@ -8,13 +8,15 @@
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE StandaloneDeriving        #-}
 
 module WordPressTests where
 
+import           Control.Applicative           (liftA3)
 import           Control.Lens                  (at, filtered, ix, sans, to,
                                                 (%~), (&), (.~), (?~), (^.),
-                                                (^..), (^?), _Wrapped, _Just)
+                                                (^..), (^?), _Just, _Wrapped)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
@@ -25,7 +27,7 @@ import           Data.Dependent.Sum            (DSum (..), (==>))
 import           Data.Functor.Classes          (Eq1, Ord1)
 import           Data.Functor.Identity         (Identity (..))
 import qualified Data.Map                      as M
-import           Data.Maybe                    (isJust)
+import           Data.Maybe                    (fromMaybe, isJust)
 import           Data.Semigroup                ((<>))
 import qualified Data.Text                     as T
 import           Data.Time                     (LocalTime (LocalTime),
@@ -34,8 +36,10 @@ import           Data.Time                     (LocalTime (LocalTime),
                                                 nominalDay, secondsToDiffTime,
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
+import           Network.HTTP.Types.Status     (gone410, notFound404)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
-import           Servant.Client                (ClientM, runClientM)
+import           Servant.Client                (ClientM, ServantError (..),
+                                                runClientM)
 
 import           Hedgehog                      (Callback (..),
                                                 Command (Command),
@@ -47,9 +51,9 @@ import           Hedgehog                      (Callback (..),
                                                 annotateShow, concrete, eval,
                                                 evalEither, evalIO,
                                                 executeParallel,
-                                                executeSequential, forAll,
-                                                property, test, withRetries,
-                                                (===))
+                                                executeSequential, failure,
+                                                forAll, property, success, test,
+                                                withRetries, (===))
 import qualified Hedgehog.Gen                  as Gen
 import qualified Hedgehog.Range                as Range
 import           Test.Tasty                    (TestTree, testGroup)
@@ -59,8 +63,9 @@ import           Web.WordPress.API             (createPost, deletePost, getPost,
                                                 listPosts, listPostsAuth)
 import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
 import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
-                                                PostMap, Status (..), trashSlug, mkSlug, Slug,
-                                                mkCreatePR, mkCreateR)
+                                                PostMap, Slug, Status (..),
+                                                mkCreatePR, mkCreateR, mkSlug,
+                                                trashSlug)
 
 import           Types                         (Env (..), HasPostMaps (..),
                                                 HasPosts (..),
@@ -118,7 +123,7 @@ mkProp ::
 mkProp env@Env{..} gen exe = do
   now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cDeletePost, cList, cListAuth, cCreatePost now, cGetPost]
+    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost now, cGetPost]
     initialState = WPState . StatePosts $ M.empty
   actions <- gen commands initialState
 
@@ -473,6 +478,68 @@ cDeletePost env@Env{..} =
             -- TODO extract the optic for the field
             (posts . at varId . _Just . dmix PostSlug . _Wrapped %~ trashSlug )
             . (posts . at varId . _Just . dmix PostStatus . _Wrapped .~ Trash) $ s
+    ]
+
+cDeletePostParallel ::
+  forall n m state.
+  ( MonadGen n
+  , MonadIO m
+  , HasPosts state
+  )
+  => Env
+  -> Command n m (state :: (* -> *) -> *)
+cDeletePostParallel env@Env{..} =
+  let
+    exe (DeletePost varId force) =
+      liftIO $ runClientM (deletePost (auth env) (concrete varId) force) servantClient
+  in
+    Command genDelete exe [
+      Require $ \s (DeletePost varId _force) ->
+        let
+          postExists = s ^. posts . at varId & isJust
+          postNotTrash = postFieldAt s PostStatus varId /= Just Trash
+        in
+          postExists && postNotTrash
+    , Update $ \s (DeletePost varId forced) _o ->
+        let
+          pOld = s ^. posts . at varId
+          pOldStatus = postFieldAt s PostStatus varId
+          updateField :: forall a v. PostKey a -> (a -> a) -> state v -> state v
+          updateField key f = posts . at varId . _Just . dmix key . _Wrapped %~ f
+          forced' = fromMaybe False forced
+        in
+          -- TODO overlapping patterns
+          case (pOld, pOldStatus, forced') of
+            (Nothing, _, _) ->
+              s
+            (Just _, Just Trash, False) ->
+              s
+            (Just _, _, False) ->
+              updateField PostSlug trashSlug . updateField PostStatus (const Trash) $ s
+            (Just _, _, True) ->
+              posts %~ sans varId $ s
+    , Ensure $ \sOld _sNew (DeletePost varId forced) o ->
+        let
+          pOld = sOld ^. posts . at varId
+          pOldStatus = postFieldAt sOld PostStatus varId
+          forced' = fromMaybe False forced
+        in
+          case (pOld, pOldStatus, forced', o) of
+            -- TODO: overlapping patterns
+            (Nothing, _, _, Left FailureResponse{..}) ->
+              responseStatus === notFound404
+            (Nothing, _, _, Left e) -> do
+              annotateShow e
+              failure
+            (Nothing, _, _, Right p) -> do
+              annotateShow p
+              failure
+            (Just _, Just Trash, False, Left FailureResponse{..}) ->
+              responseStatus === gone410
+            (Just _, _, _, Right _) ->
+              success
+            (Just _, _, _, Left _) ->
+              failure
     ]
 
 genDelete ::
