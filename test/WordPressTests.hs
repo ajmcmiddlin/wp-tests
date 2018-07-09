@@ -28,7 +28,6 @@ import           Data.Functor.Classes          (Eq1, Ord1)
 import           Data.Functor.Identity         (Identity (..))
 import qualified Data.Map                      as M
 import           Data.Maybe                    (fromMaybe, isJust)
-import           Data.Semigroup                ((<>))
 import qualified Data.Text                     as T
 import           Data.Time                     (LocalTime (LocalTime),
                                                 diffUTCTime, fromGregorian,
@@ -72,8 +71,7 @@ import           Types                         (Env (..), HasPostMaps (..),
                                                 HasStatePosts (..),
                                                 StatePosts (..),
                                                 WPState (WPState),
-                                                hasKeyMatchingPredicate,
-                                                postMap)
+                                                hasKeyMatchingPredicate)
 
 wordpressTests
   :: Env
@@ -492,6 +490,29 @@ cDeletePostParallel env@Env{..} =
   let
     exe (DeletePost varId force) =
       liftIO $ runClientM (deletePost (auth env) (concrete varId) force) servantClient
+
+    -- Help GHC unify some type variables by pulling update out and giving it a signature
+    update :: forall v. Ord1 v
+      => state v -> DeletePost v -> Var (Either ServantError PostMap) v -> state v
+    update s (DeletePost varId forced) _o =
+      let
+        pOld = s ^. posts . at varId
+        pOldStatus = postFieldAt s PostStatus varId
+        forced' = fromMaybe False forced
+
+        updateField :: forall a. PostKey a -> (a -> a) -> state v -> state v
+        updateField key f = posts . at varId . _Just . dmix key . _Wrapped %~ f
+      in
+        -- TODO overlapping patterns
+        case (pOld, pOldStatus, forced') of
+          (Nothing, _, _) ->
+            s
+          (Just _, Just Trash, False) ->
+            s
+          (Just _, _, False) ->
+            updateField PostSlug trashSlug . updateField PostStatus (const Trash) $ s
+          (Just _, _, True) ->
+            posts %~ sans varId $ s
   in
     Command genDelete exe [
       Require $ \s (DeletePost varId _force) ->
@@ -500,30 +521,15 @@ cDeletePostParallel env@Env{..} =
           postNotTrash = postFieldAt s PostStatus varId /= Just Trash
         in
           postExists && postNotTrash
-    , Update $ \s (DeletePost varId forced) _o ->
-        let
-          pOld = s ^. posts . at varId
-          pOldStatus = postFieldAt s PostStatus varId
-          updateField :: forall a v. PostKey a -> (a -> a) -> state v -> state v
-          updateField key f = posts . at varId . _Just . dmix key . _Wrapped %~ f
-          forced' = fromMaybe False forced
-        in
-          -- TODO overlapping patterns
-          case (pOld, pOldStatus, forced') of
-            (Nothing, _, _) ->
-              s
-            (Just _, Just Trash, False) ->
-              s
-            (Just _, _, False) ->
-              updateField PostSlug trashSlug . updateField PostStatus (const Trash) $ s
-            (Just _, _, True) ->
-              posts %~ sans varId $ s
-    , Ensure $ \sOld _sNew (DeletePost varId forced) o ->
+    , Update update
+    , Ensure $ \sOld sNew (DeletePost varId forced) o ->
         let
           pOld = sOld ^. posts . at varId
           pOldStatus = postFieldAt sOld PostStatus varId
           forced' = fromMaybe False forced
-        in
+        in do
+          annotateShow $ sOld ^. posts
+          annotateShow $ sNew ^. posts
           case (pOld, pOldStatus, forced', o) of
             -- TODO: overlapping patterns
             (Nothing, _, _, Left FailureResponse{..}) ->
