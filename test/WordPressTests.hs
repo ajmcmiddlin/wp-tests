@@ -515,13 +515,7 @@ cDeletePostParallel env@Env{..} =
             posts %~ sans varId $ s
   in
     Command genDelete exe [
-      Require $ \s (DeletePost varId _force) ->
-        let
-          postExists = s ^. posts . at varId & isJust
-          postNotTrash = postFieldAt s PostStatus varId /= Just Trash
-        in
-          postExists && postNotTrash
-    , Update update
+      Update update
     , Ensure $ \sOld sNew (DeletePost varId forced) o ->
         let
           pOld = sOld ^. posts . at varId
@@ -557,10 +551,9 @@ genDelete ::
 genDelete s =
   let
     genId = Gen.element (s ^. posts . to M.keys)
-    genIdNotTrash = Gen.filter ((/= Just Trash) . postFieldAt s PostStatus) genId
   in
     if s ^. posts & not . null
-      then Just $ DeletePost <$> genIdNotTrash <*> Gen.maybe Gen.bool
+      then Just $ DeletePost <$> genId <*> Gen.maybe Gen.bool
       else Nothing
 
 postFieldAt ::
