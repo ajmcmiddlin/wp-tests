@@ -149,8 +149,9 @@ Right (fromList [])
 
 ### report
 
-```
-=== Steps to reproduce
+`=== Steps to reproduce
+
+Using the REST API:
 
 * Create a post
 * Run two deletes for created post concurrently:
@@ -163,8 +164,15 @@ One delete to return `200 OK` and a valid return value. The other to return a `4
 
 === Result
 
-1. Force delete returns `200 OK` and an empty post object.
+1. Force delete returns `200 OK` and an empty post object (normally returns a JSON object including keys `deleted` and `previous`).
 2. Delete without force returns a post object full of `null` (see below)
 
 INSERT OUTPUT FROM ABOVE
+
+=== Notes
+
+* WordPress is latest release version at time of writing (4.9.7)
+* Server OS is Linux (running in a VM with fresh install)
+* Default theme is installed
+* Basic-Auth plugin is the only plugin installed -- required for testing``
 ```
