@@ -91,4 +91,4 @@ nonEmptyQueryParamKeyValues ::
   -> Identity (NonEmpty a)
   -> NonEmpty (Text, Text)
 nonEmptyQueryParamKeyValues ka (Identity nea) =
-    fmap (toQueryParamKey ka, ) $ toQueryParam1 nea
+    (toQueryParamKey ka, ) <$> toQueryParam1 nea
