@@ -146,3 +146,21 @@ Right (fromList [])
     }
 }
 ```
+
+### report
+
+```
+=== Steps to reproduce
+
+* Create a post
+* Run two deletes for created post concurrently:
+   1. Force delete (query params: `?force=true`)
+   2. Delete without forcing (do not specify `force` query parameter)
+
+=== Result
+
+1. Force delete returns `200 OK` and an empty post object.
+2. Delete without force returns a post object full of `null` (see below)
+
+INSERT OUTPUT FROM ABOVE
+```
