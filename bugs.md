@@ -149,7 +149,10 @@ Right (fromList [])
 
 ### report
 
-`=== Steps to reproduce
+[posted to WordPress's trac 20180711T1230Z](https://core.trac.wordpress.org/ticket/44568)
+
+```
+=== Steps to reproduce
 
 Using the REST API:
 
