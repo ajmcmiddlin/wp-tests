@@ -5,6 +5,13 @@ network.description = "Wordpress";
 wordpress =
   { config, pkgs, ... }:
   let
+    wpPackage = pkgs.fetchFromGitHub {
+      owner = "WordPress";
+      repo = "WordPress";
+      rev = "4.9.7";
+      sha256 = "1kxwk7mqhi9n334i6yb9iyi9vbl07agbbv5fzfhrcx5d2v13h48r";
+    };
+
     basicAuthPlugin = pkgs.stdenv.mkDerivation {
       name = "basic-auth-plugin";
       # Download the theme from the wordpress site
@@ -56,6 +63,7 @@ wordpress =
                 dbPassword = "wordpress";
                 wordpressUploads = "/data/uploads";
                 languages = [ "en_GB" ];
+                package = wpPackage;
                 plugins = [ basicAuthPlugin ];
                 themes = [ twentySeventeen ];
               }
