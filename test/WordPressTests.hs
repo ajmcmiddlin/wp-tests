@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE KindSignatures            #-}
+{-# LANGUAGE LambdaCase                #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE MultiWayIf                #-}
 {-# LANGUAGE OverloadedStrings         #-}
@@ -13,9 +14,8 @@
 
 module WordPressTests where
 
-import           Control.Applicative           (liftA3)
 import           Control.Lens                  (at, filtered, ix, sans, to,
-                                                (%~), (&), (.~), (?~), (^.),
+                                                (%~), (&), (?~), (^.),
                                                 (^..), (^?), _Just, _Wrapped)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
@@ -27,7 +27,7 @@ import           Data.Dependent.Sum            (DSum (..), (==>))
 import           Data.Functor.Classes          (Eq1, Ord1)
 import           Data.Functor.Identity         (Identity (..))
 import qualified Data.Map                      as M
-import           Data.Maybe                    (fromMaybe, isJust)
+import           Data.Maybe                    (fromMaybe)
 import qualified Data.Text                     as T
 import           Data.Time                     (LocalTime (LocalTime),
                                                 diffUTCTime, fromGregorian,
@@ -58,13 +58,17 @@ import qualified Hedgehog.Range                as Range
 import           Test.Tasty                    (TestTree, testGroup)
 import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Web.WordPress.API             (createPost, deletePost, getPost,
+import           Web.WordPress.API             (createPost, deletePost,
+                                                deletePostForce, getPost,
                                                 listPosts, listPostsAuth)
 import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
-import           Web.WordPress.Types.Post      (Author (Author), PostKey (..),
-                                                PostMap, Slug, Status (..),
-                                                mkCreatePR, mkCreateR, mkSlug,
-                                                trashSlug)
+import           Web.WordPress.Types.Post      (Author (Author),
+                                                DeletedPost (..),
+                                                ForceDelete (..),
+                                                NoForceDelete (..),
+                                                PostKey (..), PostMap, Slug,
+                                                Status (..), mkCreatePR,
+                                                mkCreateR, mkSlug, trashSlug)
 
 import           Types                         (Env (..), HasPostMaps (..),
                                                 HasPosts (..),
@@ -447,37 +451,6 @@ instance HTraversable DeletePost where
   htraverse f (DeletePost (Var postId) force) =
     ($ force) . DeletePost . Var <$> f postId
 
-cDeletePost
-  :: ( MonadGen n
-     , MonadIO m
-     , MonadTest m
-     , HasPosts state
-     )
-  => Env
-  -> Command n m (state :: (* -> *) -> *)
-cDeletePost env@Env{..} =
-  let
-    exe (DeletePost varId force) = do
-      let
-        delete = deletePost (auth env) (concrete varId) force
-      evalEither =<< liftIO (runClientM delete servantClient)
-  in
-    Command genDelete exe [
-      Require $ \s (DeletePost varId _force) ->
-        let
-          postExists = s ^. posts . at varId & isJust
-          postNotTrash = postFieldAt s PostStatus varId /= Just Trash
-        in
-          postExists && postNotTrash
-    , Update $ \s (DeletePost varId forced) _o ->
-        case forced of
-          Just True -> posts %~ sans varId $ s
-          _ ->
-            -- TODO extract the optic for the field
-            (posts . at varId . _Just . dmix PostSlug . _Wrapped %~ trashSlug )
-            . (posts . at varId . _Just . dmix PostStatus . _Wrapped .~ Trash) $ s
-    ]
-
 cDeletePostParallel ::
   forall n m state.
   ( MonadGen n
@@ -489,11 +462,11 @@ cDeletePostParallel ::
 cDeletePostParallel env@Env{..} =
   let
     exe (DeletePost varId force) =
-      liftIO $ runClientM (deletePost (auth env) (concrete varId) force) servantClient
+      liftIO $ runClientM (getDelete (auth env) (concrete varId) force) servantClient
 
     -- Help GHC unify some type variables by pulling update out and giving it a signature
     update :: forall v. Ord1 v
-      => state v -> DeletePost v -> Var (Either ServantError PostMap) v -> state v
+      => state v -> DeletePost v -> Var (Either ServantError DeletedPost) v -> state v
     update s (DeletePost varId forced) _o =
       let
         pOld = s ^. posts . at varId
@@ -541,6 +514,16 @@ cDeletePostParallel env@Env{..} =
             (Just _, _, _, Left _) ->
               failure
     ]
+
+getDelete ::
+  BasicAuthData
+  -> Int
+  -> Maybe Bool
+  -> ClientM DeletedPost
+getDelete a postId = \case
+  Nothing -> deletePost a postId Nothing
+  Just False -> deletePost a postId (Just NoForceDelete)
+  Just True -> deletePostForce a postId ForceDelete
 
 genDelete ::
   ( MonadGen n

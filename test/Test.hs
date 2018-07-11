@@ -2,7 +2,6 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 import qualified Data.ByteString.Char8    as BS8
-import qualified Data.Dependent.Map       as DM
 import           Data.Functor             (void)
 import           Data.Semigroup           ((<>))
 import           Database.MySQL.Base      (connectDatabase, connectHost,
@@ -50,7 +49,6 @@ mkEnv = do
       ]
     servantClient = ClientEnv mgr $ BaseUrl Http host 80 "/wp-json/wp/v2"
     reset = resetUsing resetSqlFile dbCmdLineArgs
-    lp = DM.empty
   pure Env{..}
 
 runWithEnv

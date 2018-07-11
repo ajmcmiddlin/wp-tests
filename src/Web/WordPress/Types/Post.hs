@@ -39,6 +39,11 @@ module Web.WordPress.Types.Post
   , Sticky (..)
   , mkCreatePR
   , mkCreateR
+
+  -- * Deleting posts
+  , DeletedPost (..)
+  , ForceDelete (..)
+  , NoForceDelete (..)
   ) where
 
 import           Control.Applicative   ((<|>))
@@ -59,6 +64,7 @@ import           Data.Some             (Some (This))
 import           Data.Text             (Text)
 import qualified Data.Text             as T
 import           Data.Time             (LocalTime)
+import           GHC.Generics          (Generic)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
 import           Web.HttpApiData       (ToHttpApiData (toQueryParam))
 
@@ -350,6 +356,35 @@ createKeys = [
   , This PostCategories
   , This PostTags
   ]
+
+-- | When a post is force (fully) deleted, the return type changes slightly
+data DeletedPost =
+  TrashedPost PostMap
+  | DeletedPost
+    { deleted  :: Bool
+    , previous :: PostMap
+    }
+  deriving (Eq, Show, Generic)
+
+instance FromJSON DeletedPost where
+  parseJSON v =
+        TrashedPost <$> parseJSON v
+    <|> withObject "DeletedPost" (\o -> DeletedPost <$> o .: "deleted" <*> o .: "previous") v
+
+-- | Type to capture force deleting
+data ForceDelete =
+  ForceDelete
+  deriving (Eq, Show)
+
+instance ToHttpApiData ForceDelete where
+  toQueryParam _ = "true"
+
+data NoForceDelete =
+  NoForceDelete
+  deriving (Eq, Show)
+
+instance ToHttpApiData NoForceDelete where
+  toQueryParam _ = "false"
 
 data Status =
     Publish

@@ -8,12 +8,14 @@ import           Data.Proxy                    (Proxy (Proxy))
 import           Servant.API                   ((:<|>) ((:<|>)), (:>),
                                                 BasicAuth, BasicAuthData,
                                                 Capture, Delete, Get, JSON,
-                                                Post, ReqBody, QueryParam)
+                                                Post, QueryParam, ReqBody)
 import           Servant.Client                (ClientM, client)
 
 import           Servant.QueryParamMap         (QueryParamMap)
+import           Servant.RequiredQueryParam    (QueryParam')
 import           Web.WordPress.Types.ListPosts (ListPostsKey, ListPostsMap)
-import           Web.WordPress.Types.Post      (PostMap)
+import           Web.WordPress.Types.Post      (DeletedPost, ForceDelete,
+                                                NoForceDelete, PostMap)
 import           Web.WordPress.YoloContent     (YoloJSON)
 
 type Posts =
@@ -22,7 +24,8 @@ type Posts =
   :<|> BasicAuth "wordpress" () :> List
   :<|> BasicAuth "wordpress" () :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
   :<|> BasicAuth "wordpress" () :> Capture "id" Int :> Get '[JSON] PostMap
-  :<|> BasicAuth "wordpress" () :> Capture "id" Int :> QueryParam "force" Bool :> Delete '[JSON] PostMap
+  :<|> BasicAuth "wordpress" () :> Capture "id" Int :> QueryParam "force" NoForceDelete :> Delete '[JSON] DeletedPost
+  :<|> BasicAuth "wordpress" () :> Capture "id" Int :> QueryParam' "force" ForceDelete :> Delete '[JSON] DeletedPost
   )
 
 type List = QueryParamMap ListPostsKey Identity :> Get '[JSON, YoloJSON] [PostMap]
@@ -34,7 +37,8 @@ listPosts :: ListPostsMap -> ClientM [PostMap]
 listPostsAuth :: BasicAuthData -> ListPostsMap -> ClientM [PostMap]
 createPost :: BasicAuthData -> PostMap -> ClientM PostMap
 getPost :: BasicAuthData -> Int -> ClientM PostMap
-deletePost :: BasicAuthData -> Int -> Maybe Bool -> ClientM PostMap
+deletePost :: BasicAuthData -> Int -> Maybe NoForceDelete -> ClientM DeletedPost
+deletePostForce :: BasicAuthData -> Int -> ForceDelete -> ClientM DeletedPost
 
-(listPosts :<|> listPostsAuth :<|> createPost :<|> getPost :<|> deletePost) =
-  client postsAPI
+(     listPosts :<|> listPostsAuth :<|> createPost :<|> getPost
+ :<|> deletePost :<|> deletePostForce ) = client postsAPI
