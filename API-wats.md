@@ -44,3 +44,14 @@ When creating posts:
 User facing text fields (title, content, excerpt) have a `rendered` attribute that WordPress
 produces from the raw input. For example "1x0" gets changed to "1&times;0". This makes testing hard
 because you either have to carefully limit your inputs or implement WordPress's rendering engine.
+
+### Deleting
+
+If you force a delete, you get back a JSON object with two fields:
+
+```haskell
+deleted :: Bool
+previous :: PostMap
+```
+
+If you don't force the delete, you get back a `PostMap` for the updated post.
