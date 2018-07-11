@@ -157,6 +157,10 @@ Right (fromList [])
    1. Force delete (query params: `?force=true`)
    2. Delete without forcing (do not specify `force` query parameter)
 
+=== Expected
+
+One delete to return `200 OK` and a valid return value. The other to return a `404 Not Found` or `410 Gone` depending on which one was successful.
+
 === Result
 
 1. Force delete returns `200 OK` and an empty post object.
