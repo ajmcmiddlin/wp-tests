@@ -54,4 +54,5 @@ deleted :: Bool
 previous :: PostMap
 ```
 
-If you don't force the delete, you get back a `PostMap` for the updated post.
+If you don't force the delete, you get back a `PostMap` for the updated post (its status is set to
+`Trash`).
