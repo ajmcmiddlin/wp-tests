@@ -52,7 +52,7 @@ import           Data.Aeson            (FromJSON (..), ToJSON (..),
                                         Value (Bool, String), object,
                                         withObject, withText, (.:))
 import           Data.Aeson.Types      (FromJSON1, Result (..), ToJSON1 (..),
-                                        parse, parseJSON1, toJSON1)
+                                        parse, toJSON1, parseJSON1)
 import           Data.Dependent.Map    (DMap)
 import           Data.Dependent.Sum    (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
@@ -68,9 +68,10 @@ import           GHC.Generics          (Generic)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
 import           Web.HttpApiData       (ToHttpApiData (toQueryParam))
 
-import           Data.GADT.Aeson       (EqViaKey (..), FromJSONViaKey (..),
+import           Data.GADT.Aeson       (EqViaKey (..),
                                         GKey (..), ToJSONViaKey (..),
                                         mkParseJSON, symName, toJSONDMap)
+import           Data.GADT.Aeson.TH    (deriveFromJSONViaKey, deriveShowTag, deriveToJSONViaKey)
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
@@ -130,91 +131,11 @@ instance Eq1 f => EqViaKey PostKey f where
   eqViaKey PostCategories    = eq1
   eqViaKey PostTags          = eq1
 
--- TODO: use TH to get rid of this
-instance FromJSON1 f => FromJSONViaKey PostKey f where
-  parseJSONViaKey PostDate          = parseJSON1
-  parseJSONViaKey PostDateGmt       = parseJSON1
-  parseJSONViaKey PostGuid          = parseJSON1
-  parseJSONViaKey PostId            = parseJSON1
-  parseJSONViaKey PostLink          = parseJSON1
-  parseJSONViaKey PostModified      = parseJSON1
-  parseJSONViaKey PostModifiedGmt   = parseJSON1
-  parseJSONViaKey PostSlug          = parseJSON1
-  parseJSONViaKey PostStatus        = parseJSON1
-  parseJSONViaKey PostType          = parseJSON1
-  parseJSONViaKey PostPassword      = parseJSON1
-  parseJSONViaKey PostTitle         = parseJSON1
-  parseJSONViaKey PostContent       = parseJSON1
-  parseJSONViaKey PostAuthor        = parseJSON1
-  parseJSONViaKey PostExcerpt       = parseJSON1
-  parseJSONViaKey PostFeaturedMedia = parseJSON1
-  parseJSONViaKey PostCommentStatus = parseJSON1
-  parseJSONViaKey PostPingStatus    = parseJSON1
-  parseJSONViaKey PostFormat        = parseJSON1
-  parseJSONViaKey PostMeta          = parseJSON1
-  parseJSONViaKey PostSticky        = parseJSON1
-  parseJSONViaKey PostTemplate      = parseJSON1
-  parseJSONViaKey PostCategories    = parseJSON1
-  parseJSONViaKey PostTags          = parseJSON1
-
-instance ToJSON1 f => ToJSONViaKey PostKey f where
-  toJSONViaKey PostDate          = toJSON1
-  toJSONViaKey PostDateGmt       = toJSON1
-  toJSONViaKey PostGuid          = toJSON1
-  toJSONViaKey PostId            = toJSON1
-  toJSONViaKey PostLink          = toJSON1
-  toJSONViaKey PostModified      = toJSON1
-  toJSONViaKey PostModifiedGmt   = toJSON1
-  toJSONViaKey PostSlug          = toJSON1
-  toJSONViaKey PostStatus        = toJSON1
-  toJSONViaKey PostType          = toJSON1
-  toJSONViaKey PostPassword      = toJSON1
-  toJSONViaKey PostTitle         = toJSON1
-  toJSONViaKey PostContent       = toJSON1
-  toJSONViaKey PostAuthor        = toJSON1
-  toJSONViaKey PostExcerpt       = toJSON1
-  toJSONViaKey PostFeaturedMedia = toJSON1
-  toJSONViaKey PostCommentStatus = toJSON1
-  toJSONViaKey PostPingStatus    = toJSON1
-  toJSONViaKey PostFormat        = toJSON1
-  toJSONViaKey PostMeta          = toJSON1
-  toJSONViaKey PostSticky        = toJSON1
-  toJSONViaKey PostTemplate      = toJSON1
-  toJSONViaKey PostCategories    = toJSON1
-  toJSONViaKey PostTags          = toJSON1
-
 instance ToJSON1 f => ToJSON (DMap PostKey f) where
   toJSON = toJSONDMap
 
 instance (Applicative f, FromJSON1 f) => FromJSON (DMap PostKey f) where
   parseJSON = mkParseJSON "Post"
-
--- TODO: use TH to get rid of this
-instance Show1 f => ShowTag PostKey f where
-  showTaggedPrec PostDate          = showsPrec1
-  showTaggedPrec PostDateGmt       = showsPrec1
-  showTaggedPrec PostGuid          = showsPrec1
-  showTaggedPrec PostId            = showsPrec1
-  showTaggedPrec PostLink          = showsPrec1
-  showTaggedPrec PostModified      = showsPrec1
-  showTaggedPrec PostModifiedGmt   = showsPrec1
-  showTaggedPrec PostSlug          = showsPrec1
-  showTaggedPrec PostStatus        = showsPrec1
-  showTaggedPrec PostType          = showsPrec1
-  showTaggedPrec PostPassword      = showsPrec1
-  showTaggedPrec PostTitle         = showsPrec1
-  showTaggedPrec PostContent       = showsPrec1
-  showTaggedPrec PostAuthor        = showsPrec1
-  showTaggedPrec PostExcerpt       = showsPrec1
-  showTaggedPrec PostFeaturedMedia = showsPrec1
-  showTaggedPrec PostCommentStatus = showsPrec1
-  showTaggedPrec PostPingStatus    = showsPrec1
-  showTaggedPrec PostFormat        = showsPrec1
-  showTaggedPrec PostMeta          = showsPrec1
-  showTaggedPrec PostSticky        = showsPrec1
-  showTaggedPrec PostTemplate      = showsPrec1
-  showTaggedPrec PostCategories    = showsPrec1
-  showTaggedPrec PostTags          = showsPrec1
 
 -- TODO: use TH to get rid of this
 instance Eq1 f => EqTag PostKey f where
@@ -364,7 +285,9 @@ data DeletedPost =
     { deleted  :: Bool
     , previous :: PostMap
     }
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Generic)
+
+deriving instance Show DeletedPost
 
 instance FromJSON DeletedPost where
   parseJSON v =
@@ -705,3 +628,6 @@ deriveGEq ''PostKey
 deriveGCompare ''PostKey
 deriveGShow ''PostKey
 
+deriveFromJSONViaKey ''PostKey
+deriveToJSONViaKey ''PostKey
+deriveShowTag ''PostKey
