@@ -14,28 +14,45 @@ import           Data.Functor.Classes (Eq1, Show1, eq1, showsPrec1)
 import           Data.GADT.Aeson      (EqViaKey (..), FromJSONViaKey (..),
                                        GKey (..), ToJSONViaKey (..),
                                        mkParseJSON, symName, toJSONDMap)
+import           Data.Semigroup       ((<>))
 
 import           Language.Haskell.TH
 
--- instance FromJSON1 f => FromJSONViaKey {NAME} f where
---   parseJSONViaKey {CONSTRUCTOR} = parseJSON1
-deriveFromJSONViaKey ::
+deriveFromJSONViaKey, deriveToJSONViaKey, deriveShowTag, deriveEqViaKey, deriveEqTag ::
   Name
   -> DecsQ
+
 deriveFromJSONViaKey n =
   deriveClassForGADT ''FromJSONViaKey ''FromJSON1 n 'parseJSONViaKey 'parseJSON1
 
-deriveToJSONViaKey ::
-  Name
-  -> DecsQ
 deriveToJSONViaKey n =
   deriveClassForGADT ''ToJSONViaKey ''ToJSON1 n 'toJSONViaKey 'toJSON1
 
-deriveShowTag ::
-  Name
-  -> DecsQ
 deriveShowTag n =
   deriveClassForGADT ''ShowTag ''Show1 n 'showTaggedPrec 'showsPrec1
+
+deriveEqViaKey n =
+  deriveClassForGADT ''EqViaKey ''Eq1 n 'eqViaKey 'eq1
+
+deriveEqTag n = do
+  keyType <- reify n
+  let
+    mkEq conName = clause [conP conName [], conP conName []] (normalB (varE 'eq1)) []
+    mkDecl = \case
+      (GadtC [conName] _bangTypes _ty) -> mkEq conName
+      _ -> fail "Can only deriveFromJSONViaKey with GADT constructors"
+    decl = case keyType of
+      TyConI (DataD _ctx _n _tyvars _kind cons _deriving) ->
+        let
+          d = fmap mkDecl cons <> [otherwize]
+          notEqBody = normalB (lamE [wildP, wildP] (conE 'False))
+          otherwize = clause [wildP, wildP] notEqBody []
+        in
+          funD 'eqTagged d
+      _ -> fail "Can only deriveFromJSONViaKey with a type constructor"
+  f' <- varT <$> newName "f"
+  let c = cxt [appT (conT ''Eq1) f']
+  pure <$> instanceD c (foldl appT (conT ''EqTag) [conT n, f']) [decl]
 
 deriveClassForGADT ::
   Name
