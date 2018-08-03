@@ -29,7 +29,7 @@ deriveToJSONViaKey ::
   Name
   -> DecsQ
 deriveToJSONViaKey n =
-  deriveClassForGADT ''ToJSONViaKey ''ToJSON1 n 'toJSONViaKey 'toJSON
+  deriveClassForGADT ''ToJSONViaKey ''ToJSON1 n 'toJSONViaKey 'toJSON1
 
 deriveShowTag ::
   Name
