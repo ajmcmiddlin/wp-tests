@@ -3,17 +3,12 @@
 
 module Data.GADT.Aeson.TH where
 
-import           Data.Aeson           (FromJSON (..), ToJSON (..),
-                                       Value (Bool, String), object, withObject,
-                                       withText, (.:))
-import           Data.Aeson.Types     (FromJSON1, Result (..), ToJSON1 (..),
-                                       parse, parseJSON1, toJSON1)
-import           Data.Dependent.Map   (DMap)
+import           Data.Aeson.Types     (FromJSON1, ToJSON1 (..), parseJSON1,
+                                       toJSON1)
 import           Data.Dependent.Sum   (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes (Eq1, Show1, eq1, showsPrec1)
 import           Data.GADT.Aeson      (EqViaKey (..), FromJSONViaKey (..),
-                                       GKey (..), ToJSONViaKey (..),
-                                       mkParseJSON, symName, toJSONDMap)
+                                       ToJSONViaKey (..))
 import           Data.Semigroup       ((<>))
 
 import           Language.Haskell.TH
