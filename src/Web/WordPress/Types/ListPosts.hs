@@ -16,10 +16,8 @@
 module Web.WordPress.Types.ListPosts where
 
 import           Data.Aeson               (ToJSON (..), Value (String))
-import           Data.Aeson.Types         (ToJSON1 (..), toJSON1)
+import           Data.Aeson.Types         (ToJSON1 (..))
 import           Data.Dependent.Map       (DMap)
-import           Data.Dependent.Sum       (EqTag (..), ShowTag (..))
-import           Data.Functor.Classes     (Eq1, Show1, eq1, showsPrec1)
 import           Data.Functor.Identity    (Identity (..))
 import           Data.GADT.Compare.TH     (deriveGCompare, deriveGEq)
 import           Data.GADT.Show.TH        (deriveGShow)
@@ -29,8 +27,9 @@ import           Data.Text                (Text)
 import           Data.Time                (LocalTime)
 import           Web.HttpApiData          (ToHttpApiData (toQueryParam))
 
-import           Data.GADT.Aeson          (GKey (..), ToJSONViaKey (..),
-                                           toJSONDMap)
+import           Data.GADT.Aeson          (GKey (..), toJSONDMap)
+import           Data.GADT.Aeson.TH       (deriveEqTag, deriveShowTag,
+                                           deriveToJSONViaKey)
 import           Servant.QueryParamMap    (ToQueryParamKey (..),
                                            ToQueryParamKeyValues (..),
                                            defaultToQueryParamKeyValues,
@@ -152,72 +151,8 @@ instance ToQueryParamKeyValues ListPostsKey Identity where
   toQueryParamKeyValues ListPostsTagsExclude = nonEmptyQueryParamKeyValues ListPostsTagsExclude
   toQueryParamKeyValues ListPostsSticky = defaultToQueryParamKeyValues ListPostsSticky
 
-instance Show1 f => ShowTag ListPostsKey f where
-  showTaggedPrec ListPostsContext           = showsPrec1
-  showTaggedPrec ListPostsPage              = showsPrec1
-  showTaggedPrec ListPostsPerPage           = showsPrec1
-  showTaggedPrec ListPostsSearch            = showsPrec1
-  showTaggedPrec ListPostsAfter             = showsPrec1
-  showTaggedPrec ListPostsAuthor            = showsPrec1
-  showTaggedPrec ListPostsAuthorExclude     = showsPrec1
-  showTaggedPrec ListPostsBefore            = showsPrec1
-  showTaggedPrec ListPostsExclude           = showsPrec1
-  showTaggedPrec ListPostsInclude           = showsPrec1
-  showTaggedPrec ListPostsOffset            = showsPrec1
-  showTaggedPrec ListPostsOrder             = showsPrec1
-  showTaggedPrec ListPostsSlug              = showsPrec1
-  showTaggedPrec ListPostsStatus            = showsPrec1
-  showTaggedPrec ListPostsCategories        = showsPrec1
-  showTaggedPrec ListPostsCategoriesExclude = showsPrec1
-  showTaggedPrec ListPostsTags              = showsPrec1
-  showTaggedPrec ListPostsTagsExclude       = showsPrec1
-  showTaggedPrec ListPostsSticky            = showsPrec1
-
-instance ToJSON1 f => ToJSONViaKey ListPostsKey f where
-  toJSONViaKey ListPostsContext           = toJSON1
-  toJSONViaKey ListPostsPage              = toJSON1
-  toJSONViaKey ListPostsPerPage           = toJSON1
-  toJSONViaKey ListPostsSearch            = toJSON1
-  toJSONViaKey ListPostsAfter             = toJSON1
-  toJSONViaKey ListPostsAuthor            = toJSON1
-  toJSONViaKey ListPostsAuthorExclude     = toJSON1
-  toJSONViaKey ListPostsBefore            = toJSON1
-  toJSONViaKey ListPostsExclude           = toJSON1
-  toJSONViaKey ListPostsInclude           = toJSON1
-  toJSONViaKey ListPostsOffset            = toJSON1
-  toJSONViaKey ListPostsOrder             = toJSON1
-  toJSONViaKey ListPostsSlug              = toJSON1
-  toJSONViaKey ListPostsStatus            = toJSON1
-  toJSONViaKey ListPostsCategories        = toJSON1
-  toJSONViaKey ListPostsCategoriesExclude = toJSON1
-  toJSONViaKey ListPostsTags              = toJSON1
-  toJSONViaKey ListPostsTagsExclude       = toJSON1
-  toJSONViaKey ListPostsSticky            = toJSON1
-
 instance ToJSON1 f => ToJSON (DMap ListPostsKey f) where
   toJSON = toJSONDMap
-
-instance Eq1 f => EqTag ListPostsKey f where
-  eqTagged ListPostsContext ListPostsContext                     = eq1
-  eqTagged ListPostsPage ListPostsPage                           = eq1
-  eqTagged ListPostsPerPage ListPostsPerPage                     = eq1
-  eqTagged ListPostsSearch ListPostsSearch                       = eq1
-  eqTagged ListPostsAfter ListPostsAfter                         = eq1
-  eqTagged ListPostsAuthor ListPostsAuthor                       = eq1
-  eqTagged ListPostsAuthorExclude ListPostsAuthorExclude         = eq1
-  eqTagged ListPostsBefore ListPostsBefore                       = eq1
-  eqTagged ListPostsExclude ListPostsExclude                     = eq1
-  eqTagged ListPostsInclude ListPostsInclude                     = eq1
-  eqTagged ListPostsOffset ListPostsOffset                       = eq1
-  eqTagged ListPostsOrder ListPostsOrder                         = eq1
-  eqTagged ListPostsSlug ListPostsSlug                           = eq1
-  eqTagged ListPostsStatus ListPostsStatus                       = eq1
-  eqTagged ListPostsCategories ListPostsCategories               = eq1
-  eqTagged ListPostsCategoriesExclude ListPostsCategoriesExclude = eq1
-  eqTagged ListPostsTags ListPostsTags                           = eq1
-  eqTagged ListPostsTagsExclude ListPostsTagsExclude             = eq1
-  eqTagged ListPostsSticky ListPostsSticky                       = eq1
-  eqTagged _ _ = \_ _ -> False
 
 data Order =
     Asc
@@ -248,3 +183,7 @@ data OrderBy =
 deriveGEq ''ListPostsKey
 deriveGCompare ''ListPostsKey
 deriveGShow ''ListPostsKey
+
+deriveShowTag ''ListPostsKey
+deriveEqTag ''ListPostsKey
+deriveToJSONViaKey ''ListPostsKey
