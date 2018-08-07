@@ -52,10 +52,8 @@ import           Data.Aeson            (FromJSON (..), ToJSON (..),
                                         Value (Bool, String), object,
                                         withObject, withText, (.:))
 import           Data.Aeson.Types      (FromJSON1, Result (..), ToJSON1 (..),
-                                        parse, parseJSON1, toJSON1)
+                                        parse)
 import           Data.Dependent.Map    (DMap)
-import           Data.Dependent.Sum    (EqTag (..), ShowTag (..))
-import           Data.Functor.Classes  (Eq1, Show1, eq1, showsPrec1)
 import           Data.Functor.Identity (Identity)
 import           Data.GADT.Compare.TH  (deriveGCompare, deriveGEq)
 import           Data.GADT.Show.TH     (deriveGShow)
@@ -68,8 +66,7 @@ import           GHC.Generics          (Generic)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
 import           Web.HttpApiData       (ToHttpApiData (toQueryParam))
 
-import           Data.GADT.Aeson       (EqViaKey (..), GKey (..),
-                                        ToJSONViaKey (..), mkParseJSON, symName,
+import           Data.GADT.Aeson       (GKey (..), mkParseJSON, symName,
                                         toJSONDMap)
 import           Data.GADT.Aeson.TH    (deriveEqTag, deriveEqViaKey,
                                         deriveFromJSONViaKey, deriveShowTag,
