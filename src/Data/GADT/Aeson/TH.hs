@@ -12,7 +12,7 @@ import           Data.Dependent.Map   (DMap)
 import           Data.Dependent.Sum   (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes (Eq1, Show1, eq1, showsPrec1)
 import           Data.GADT.Aeson      (EqViaKey (..), FromJSONViaKey (..),
-                                       GKey (..), ToJSONViaKey (..),
+                                       JSONKey (..), ToJSONViaKey (..),
                                        mkParseJSON, symName, toJSONDMap)
 import           Data.Semigroup       ((<>))
 

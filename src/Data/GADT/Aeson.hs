@@ -28,7 +28,7 @@ class FromJSON1 f => FromJSONViaKey k f where
 class ToJSONViaKey k f where
   toJSONViaKey :: k a -> f a -> Value
 
-class GKey k where
+class JSONKey k where
   toFieldName :: k a -> Text
   fromFieldName :: Text -> Maybe (Some k)
   keys :: [Some k]
@@ -38,7 +38,7 @@ class GKey k where
   fromFieldName = defaultFromFieldName
 
 defaultFromFieldName
-  :: GKey tag
+  :: JSONKey tag
   => Text
   -> Maybe (Some tag)
 defaultFromFieldName t =
@@ -48,7 +48,7 @@ class EqViaKey k f where
   eqViaKey :: k a -> f a -> f a -> Bool
 
 toJSONDMap ::
-  ( GKey k
+  ( JSONKey k
   , ToJSONViaKey k f
   )
   => DMap k f
@@ -63,7 +63,7 @@ toJSONDMap dm =
 -- a name for the object can be provided, which gives better error messages.
 mkParseJSON
   :: forall k f.
-    (GKey k, GCompare k, FromJSONViaKey k f)
+    (JSONKey k, GCompare k, FromJSONViaKey k f)
   => String
   -> Value
   -> Parser (DMap k f)

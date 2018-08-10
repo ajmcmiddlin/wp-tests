@@ -66,7 +66,7 @@ import           GHC.Generics          (Generic)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
 import           Web.HttpApiData       (ToHttpApiData (toQueryParam))
 
-import           Data.GADT.Aeson       (GKey (..), mkParseJSON, symName,
+import           Data.GADT.Aeson       (JSONKey (..), mkParseJSON, symName,
                                         toJSONDMap)
 import           Data.GADT.Aeson.TH    (deriveEqTag, deriveEqViaKey,
                                         deriveFromJSONViaKey, deriveShowTag,
@@ -111,7 +111,7 @@ instance (Applicative f, FromJSON1 f) => FromJSON (DMap PostKey f) where
   parseJSON = mkParseJSON "Post"
 
 -- TODO: use TH and Symbol to get rid of this
-instance GKey PostKey where
+instance JSONKey PostKey where
   toFieldName = \case
     PostDate -> "date"
     PostDateGmt -> "date_gmt"
