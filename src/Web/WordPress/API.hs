@@ -19,13 +19,19 @@ import           Web.WordPress.Types.Post      (DeletedPost, ForceDelete,
 import           Web.WordPress.YoloContent     (YoloJSON)
 
 type Posts =
-  "posts" :>
-  (    List
+  "posts" :> (
+  List
   :<|> BasicAuth "wordpress" () :> List
-  :<|> BasicAuth "wordpress" () :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
+
   :<|> BasicAuth "wordpress" () :> Capture "id" Int :> Get '[JSON] PostMap
-  :<|> BasicAuth "wordpress" () :> Capture "id" Int :> QueryParam "force" NoForceDelete :> Delete '[JSON] DeletedPost
-  :<|> BasicAuth "wordpress" () :> Capture "id" Int :> QueryParam' "force" ForceDelete :> Delete '[JSON] DeletedPost
+
+  :<|> BasicAuth "wordpress" () :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
+
+  :<|> BasicAuth "wordpress" () :> Capture "id" Int :>
+       QueryParam "force" NoForceDelete :> Delete '[JSON] DeletedPost
+
+  :<|> BasicAuth "wordpress" () :> Capture "id" Int :>
+       QueryParam' "force" ForceDelete :> Delete '[JSON] DeletedPost
   )
 
 type List = QueryParamMap ListPostsKey Identity :> Get '[JSON, YoloJSON] [PostMap]
