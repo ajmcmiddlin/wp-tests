@@ -41,10 +41,10 @@ postsAPI = Proxy
 
 listPosts :: ListPostsMap -> ClientM [PostMap]
 listPostsAuth :: BasicAuthData -> ListPostsMap -> ClientM [PostMap]
-createPost :: BasicAuthData -> PostMap -> ClientM PostMap
 getPost :: BasicAuthData -> Int -> ClientM PostMap
+createPost :: BasicAuthData -> PostMap -> ClientM PostMap
 deletePost :: BasicAuthData -> Int -> Maybe NoForceDelete -> ClientM DeletedPost
 deletePostForce :: BasicAuthData -> Int -> ForceDelete -> ClientM DeletedPost
 
-(     listPosts :<|> listPostsAuth :<|> createPost :<|> getPost
+(     listPosts :<|> listPostsAuth :<|> getPost :<|> createPost
  :<|> deletePost :<|> deletePostForce ) = client postsAPI
