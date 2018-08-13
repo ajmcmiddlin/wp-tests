@@ -11,14 +11,14 @@ import           Data.Aeson.Types     (FromJSON1, Result (..), ToJSON1 (..),
 import           Data.Dependent.Map   (DMap)
 import           Data.Dependent.Sum   (EqTag (..), ShowTag (..))
 import           Data.Functor.Classes (Eq1, Show1, eq1, showsPrec1)
-import           Data.GADT.Aeson      (EqViaKey (..), FromJSONViaKey (..),
+import           Data.GADT.Aeson      (FromJSONViaKey (..),
                                        JSONKey (..), ToJSONViaKey (..),
                                        mkParseJSON, symName, toJSONDMap)
 import           Data.Semigroup       ((<>))
 
 import           Language.Haskell.TH
 
-deriveFromJSONViaKey, deriveToJSONViaKey, deriveShowTag, deriveEqViaKey, deriveEqTag ::
+deriveFromJSONViaKey, deriveToJSONViaKey, deriveShowTag, deriveEqTag ::
   Name
   -> DecsQ
 
@@ -30,9 +30,6 @@ deriveToJSONViaKey n =
 
 deriveShowTag n =
   deriveClassForGADT ''ShowTag ''Show1 n 'showTaggedPrec 'showsPrec1
-
-deriveEqViaKey n =
-  deriveClassForGADT ''EqViaKey ''Eq1 n 'eqViaKey 'eq1
 
 deriveEqTag n = do
   keyType <- reify n

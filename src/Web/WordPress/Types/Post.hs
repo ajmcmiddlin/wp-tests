@@ -68,9 +68,8 @@ import           Web.HttpApiData       (ToHttpApiData (toQueryParam))
 
 import           Data.GADT.Aeson       (JSONKey (..), mkParseJSON, symName,
                                         toJSONDMap)
-import           Data.GADT.Aeson.TH    (deriveEqTag, deriveEqViaKey,
-                                        deriveFromJSONViaKey, deriveShowTag,
-                                        deriveToJSONViaKey)
+import           Data.GADT.Aeson.TH    (deriveEqTag, deriveFromJSONViaKey,
+                                        deriveShowTag, deriveToJSONViaKey)
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
@@ -577,5 +576,4 @@ deriveGShow ''PostKey
 deriveFromJSONViaKey ''PostKey
 deriveToJSONViaKey ''PostKey
 deriveShowTag ''PostKey
-deriveEqViaKey ''PostKey
 deriveEqTag ''PostKey

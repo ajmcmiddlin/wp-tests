@@ -44,9 +44,6 @@ defaultFromFieldName
 defaultFromFieldName t =
   getFirst $ foldMap (\(This k) -> First $ bool Nothing (Just (This k)) (toFieldName k == t)) keys
 
-class EqViaKey k f where
-  eqViaKey :: k a -> f a -> f a -> Bool
-
 toJSONDMap ::
   ( JSONKey k
   , ToJSONViaKey k f
