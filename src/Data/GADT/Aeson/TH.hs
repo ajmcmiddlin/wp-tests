@@ -37,7 +37,7 @@ deriveEqTag n = do
     mkEq conName = clause [conP conName [], conP conName []] (normalB (varE 'eq1)) []
     mkDecl = \case
       (GadtC [conName] _bangTypes _ty) -> mkEq conName
-      _ -> fail "Can only deriveFromJSONViaKey with GADT constructors"
+      _ -> fail "Can only deriveEqTag with GADT constructors"
     decl = case keyType of
       TyConI (DataD _ctx _n _tyvars _kind cons _deriving) ->
         let
@@ -46,7 +46,7 @@ deriveEqTag n = do
           otherwize = clause [wildP, wildP] notEqBody []
         in
           funD 'eqTagged d
-      _ -> fail "Can only deriveFromJSONViaKey with a type constructor"
+      _ -> fail "Can only deriveEqTag with a type constructor"
   f' <- varT <$> newName "f"
   let c = cxt [appT (conT ''Eq1) f']
   pure <$> instanceD c (foldl appT (conT ''EqTag) [conT n, f']) [decl]
@@ -64,11 +64,11 @@ deriveClassForGADT klass ctx ty method f = do
     mkEq conName = clause [conP conName []] (normalB (varE f)) []
     mkDecl = \case
       (GadtC [conName] _bangTypes _ty) -> mkEq conName
-      _ -> fail "Can only deriveFromJSONViaKey with GADT constructors"
+      _ -> fail $ "Can only derive" <> show klass <> " with GADT constructors"
     decl = case keyType of
       TyConI (DataD _ctx _n _tyvars _kind cons _deriving) ->
         funD method $ fmap mkDecl cons
-      _ -> fail "Can only deriveFromJSONViaKey with a type constructor"
+      _ -> fail $ "Can only derive" <> show klass <> " with a type constructor"
   f' <- varT <$> newName "f"
   let c = cxt [appT (conT ctx) f']
   pure <$> instanceD c (foldl appT (conT klass) [conT ty, f']) [decl]
