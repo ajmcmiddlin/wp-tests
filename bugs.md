@@ -184,6 +184,8 @@ INSERT OUTPUT FROM ABOVE
 
 ### report
 
+https://core.trac.wordpress.org/ticket/44805
+
 ```
 === Steps to reproduce
 
@@ -196,6 +198,8 @@ Using the REST API:
 
 ==== Create
 
+`POST wp-json/wp/v2/posts`
+
 {{{#!json
 {
   "status": "publish",
@@ -204,7 +208,13 @@ Using the REST API:
 }
 }}}
 
+==== Delete
+
+`DELETE wp-json/wp/v2/posts/<id>`
+
 ==== Update slug
+
+`POST wp-json/wp/v2/posts/<id>`
 
 {{{#!json
 {
@@ -214,6 +224,8 @@ Using the REST API:
 
 ==== Update status
 
+`POST wp-json/wp/v2/posts/<id>`
+
 {{{#!json
 {
   "status": "publish"
@@ -222,10 +234,10 @@ Using the REST API:
 
 === Expected 
 
-Post should be published with the slug value from the update
+Post should be published with a slug of `foo` (the updated value)
 
 === Actual
 
-Post is published with an old slug value
+Post is published with a slug of `a` (the old value)
 ```
 
