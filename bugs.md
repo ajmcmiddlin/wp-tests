@@ -179,3 +179,53 @@ INSERT OUTPUT FROM ABOVE
 * Default theme is installed
 * Basic-Auth plugin is the only plugin installed -- required for testing``
 ```
+
+## Incorrect slug when resurrecting a trashed posted
+
+### report
+
+```
+=== Steps to reproduce
+
+Using the REST API:
+
+* Create a post
+* Delete the post (not forced)
+* Update the post's slug
+* Update the post's status to `publish`
+
+==== Create
+
+{{{#!json
+{
+  "status": "publish",
+  "slug": "a",
+  "title": "a"
+}
+}}}
+
+==== Update slug
+
+{{{#!json
+{
+  "slug": "foo"
+}
+}}}
+
+==== Update status
+
+{{{#!json
+{
+  "status": "publish"
+}
+}}}
+
+=== Expected 
+
+Post should be published with the slug value from the update
+
+=== Actual
+
+Post is published with an old slug value
+```
+
