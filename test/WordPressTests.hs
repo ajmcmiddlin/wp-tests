@@ -15,8 +15,8 @@
 module WordPressTests where
 
 import           Control.Lens                  (at, filtered, ix, sans, to,
-                                                (%~), (&), (?~), (^.),
-                                                (^..), (^?), _Just, _Wrapped)
+                                                (%~), (&), (?~), (^.), (^..),
+                                                (^?), _Just, _Wrapped)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
@@ -24,10 +24,11 @@ import           Data.Dependent.Map            (DMap)
 import qualified Data.Dependent.Map            as DM
 import           Data.Dependent.Map.Lens       (dmix)
 import           Data.Dependent.Sum            (DSum (..), (==>))
+import           Data.Foldable                 (traverse_)
 import           Data.Functor.Classes          (Eq1, Ord1)
 import           Data.Functor.Identity         (Identity (..))
 import qualified Data.Map                      as M
-import           Data.Maybe                    (fromMaybe)
+import           Data.Maybe                    (fromMaybe, listToMaybe)
 import qualified Data.Text                     as T
 import           Data.Time                     (LocalTime (LocalTime),
                                                 diffUTCTime, fromGregorian,
@@ -162,16 +163,19 @@ cList, cListAuth ::
   , MonadTest m
   , HasPostMaps state
   , HasStatePosts state
+  , HasPosts state
   )
   => Env
   -> Command n m state
 cList = mkCListPosts (Just . genList) (const listPosts)
 cListAuth = mkCListPosts (Just . genListAuth) listPostsAuth
 
+-- TODO: subclass `HasPost*` to avoid so many constraints?
 mkCListPosts
   :: ( MonadIO m
      , MonadTest m
      , HasPostMaps state
+     , HasPosts state
      , HasStatePosts state
      )
   => (state Symbolic -> Maybe (n (ListPosts Symbolic)))
@@ -202,12 +206,29 @@ mkCListPosts gen list env@Env{..} =
           lup 1 ListPostsPage lpi <= numPages'
     , Ensure $ \so _sn (ListPosts _ lpi) ps -> do
         annotateShow $ so ^. statePosts
+        annotateShow ps
         let
           pws = lup Publish ListPostsStatus lpi
           perPage = lupPerPage lpi
           eLength = length . take perPage $ postsWithStatus so pws
         eLength === length ps
+        traverse_ (lookupAndCheck so) ps
     ]
+
+lookupAndCheck ::
+  ( HasPosts state
+  , MonadTest m
+  )
+  => state Concrete
+  -> PostMap
+  -> m ()
+lookupAndCheck s p = do
+  let
+    pId = runIdentity $ p DM.! PostId
+  annotateShow p
+  case s ^. posts . at (Var (Concrete pId)) of
+    Just sp -> sp === DM.intersection p sp
+    Nothing -> failure
 
 genList
   :: ( MonadGen n
