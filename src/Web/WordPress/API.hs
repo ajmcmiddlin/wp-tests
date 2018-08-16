@@ -20,21 +20,27 @@ import           Web.WordPress.YoloContent     (YoloJSON)
 
 type Posts =
   "posts" :> (
+  -- List
   List
-  :<|> BasicAuth "wordpress" () :> List
+  :<|> Auth :> List
 
-  :<|> BasicAuth "wordpress" () :> Capture "id" Int :> Get '[JSON] PostMap
+  -- Get
+  :<|> Auth :> Id :> Get '[JSON] PostMap
 
-  :<|> BasicAuth "wordpress" () :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
+  -- Create
+  :<|> Auth :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
 
-  :<|> BasicAuth "wordpress" () :> Capture "id" Int :>
-       QueryParam "force" NoForceDelete :> Delete '[JSON] DeletedPost
+  -- Update
+  :<|> Auth :> Id :> ReqBody '[JSON] PostMap :> Post '[JSON] PostMap
 
-  :<|> BasicAuth "wordpress" () :> Capture "id" Int :>
-       QueryParam' "force" ForceDelete :> Delete '[JSON] DeletedPost
+  -- Delete
+  :<|> Auth :> Id :> QueryParam "force" NoForceDelete :> Delete '[JSON] DeletedPost
+  :<|> Auth :> Id :> QueryParam' "force" ForceDelete :> Delete '[JSON] DeletedPost
   )
 
 type List = QueryParamMap ListPostsKey Identity :> Get '[JSON, YoloJSON] [PostMap]
+type Auth = BasicAuth "wordpress" ()
+type Id = Capture "id" Int
 
 postsAPI :: Proxy Posts
 postsAPI = Proxy
@@ -43,8 +49,13 @@ listPosts :: ListPostsMap -> ClientM [PostMap]
 listPostsAuth :: BasicAuthData -> ListPostsMap -> ClientM [PostMap]
 getPost :: BasicAuthData -> Int -> ClientM PostMap
 createPost :: BasicAuthData -> PostMap -> ClientM PostMap
+updatePost :: BasicAuthData -> Int -> PostMap -> ClientM PostMap
 deletePost :: BasicAuthData -> Int -> Maybe NoForceDelete -> ClientM DeletedPost
 deletePostForce :: BasicAuthData -> Int -> ForceDelete -> ClientM DeletedPost
 
-(     listPosts :<|> listPostsAuth :<|> getPost :<|> createPost
- :<|> deletePost :<|> deletePostForce ) = client postsAPI
+(     listPosts :<|> listPostsAuth
+ :<|> getPost
+ :<|> createPost
+ :<|> updatePost
+ :<|> deletePost :<|> deletePostForce ) =
+   client postsAPI
