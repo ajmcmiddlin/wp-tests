@@ -14,8 +14,7 @@ import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
 import           Web.WordPress.Types.Post (PostMap)
 
-import           Hedgehog                 (Concrete (..), HTraversable (..),
-                                           Var, concrete)
+import           Hedgehog                 (Var)
 
 data Env =
   Env
