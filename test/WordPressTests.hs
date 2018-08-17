@@ -74,8 +74,6 @@ import           Web.WordPress.Types.Post      (Author (Author),
 
 import           Types                         (Env (..), HasPostMaps (..),
                                                 HasPosts (..),
-                                                HasStatePosts (..),
-                                                StatePosts (..),
                                                 WPState (WPState),
                                                 hasKeyMatchingPredicate)
 
@@ -163,7 +161,6 @@ cList, cListAuth ::
   , MonadIO m
   , MonadTest m
   , HasPostMaps state
-  , HasStatePosts state
   , HasPosts state
   )
   => Env
@@ -177,7 +174,6 @@ mkCListPosts
      , MonadTest m
      , HasPostMaps state
      , HasPosts state
-     , HasStatePosts state
      )
   => (state Symbolic -> Maybe (n (ListPosts Symbolic)))
   -> (BasicAuthData -> ListPostsMap -> ClientM [PostMap])
@@ -206,7 +202,7 @@ mkCListPosts gen list env@Env{..} =
         in
           lup 1 ListPostsPage lpi <= numPages'
     , Ensure $ \so _sn (ListPosts _ lpi) ps -> do
-        annotateShow $ so ^. statePosts
+        annotateShow $ so ^. posts
         annotateShow ps
         let
           pws = lup Publish ListPostsStatus lpi
