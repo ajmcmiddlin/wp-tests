@@ -15,8 +15,8 @@
 module WordPressTests where
 
 import           Control.Lens                  (at, filtered, ix, sans, to,
-                                                (%~), (&), (?~), (^.),
-                                                (^..), (^?), _Just, _Wrapped)
+                                                (%~), (&), (?~), (^.), (^..),
+                                                (^?), _Just, _Wrapped)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
@@ -24,6 +24,7 @@ import           Data.Dependent.Map            (DMap)
 import qualified Data.Dependent.Map            as DM
 import           Data.Dependent.Map.Lens       (dmix)
 import           Data.Dependent.Sum            (DSum (..), (==>))
+import           Data.Foldable                 (traverse_)
 import           Data.Functor.Classes          (Eq1, Ord1)
 import           Data.Functor.Identity         (Identity (..))
 import qualified Data.Map                      as M
@@ -60,7 +61,8 @@ import           Test.Tasty.Hedgehog           (testProperty)
 
 import           Web.WordPress.API             (createPost, deletePost,
                                                 deletePostForce, getPost,
-                                                listPosts, listPostsAuth)
+                                                listPosts, listPostsAuth,
+                                                updatePost)
 import           Web.WordPress.Types.ListPosts (ListPostsKey (..), ListPostsMap)
 import           Web.WordPress.Types.Post      (Author (Author),
                                                 DeletedPost (..),
@@ -72,8 +74,6 @@ import           Web.WordPress.Types.Post      (Author (Author),
 
 import           Types                         (Env (..), HasPostMaps (..),
                                                 HasPosts (..),
-                                                HasStatePosts (..),
-                                                StatePosts (..),
                                                 WPState (WPState),
                                                 hasKeyMatchingPredicate)
 
@@ -125,8 +125,8 @@ mkProp ::
 mkProp env@Env{..} gen exe = do
   now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost now, cGetPost]
-    initialState = WPState . StatePosts $ M.empty
+    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost now, cGetPost, cUpdatePost now]
+    initialState = WPState $ M.empty
   actions <- gen commands initialState
 
   test $ do
@@ -161,18 +161,19 @@ cList, cListAuth ::
   , MonadIO m
   , MonadTest m
   , HasPostMaps state
-  , HasStatePosts state
+  , HasPosts state
   )
   => Env
   -> Command n m state
 cList = mkCListPosts (Just . genList) (const listPosts)
 cListAuth = mkCListPosts (Just . genListAuth) listPostsAuth
 
+-- TODO: subclass `HasPost*` to avoid so many constraints?
 mkCListPosts
   :: ( MonadIO m
      , MonadTest m
      , HasPostMaps state
-     , HasStatePosts state
+     , HasPosts state
      )
   => (state Symbolic -> Maybe (n (ListPosts Symbolic)))
   -> (BasicAuthData -> ListPostsMap -> ClientM [PostMap])
@@ -201,13 +202,30 @@ mkCListPosts gen list env@Env{..} =
         in
           lup 1 ListPostsPage lpi <= numPages'
     , Ensure $ \so _sn (ListPosts _ lpi) ps -> do
-        annotateShow $ so ^. statePosts
+        annotateShow $ so ^. posts
+        annotateShow ps
         let
           pws = lup Publish ListPostsStatus lpi
           perPage = lupPerPage lpi
           eLength = length . take perPage $ postsWithStatus so pws
         eLength === length ps
+        traverse_ (lookupAndCheck so) ps
     ]
+
+lookupAndCheck ::
+  ( HasPosts state
+  , MonadTest m
+  )
+  => state Concrete
+  -> PostMap
+  -> m ()
+lookupAndCheck s p = do
+  let
+    pId = runIdentity $ p DM.! PostId
+  annotateShow p
+  case s ^. posts . at (Var (Concrete pId)) of
+    Just sp -> sp === DM.intersection p sp
+    Nothing -> failure
 
 genList
   :: ( MonadGen n
@@ -327,7 +345,7 @@ cCreatePost
   -> Command n m (state :: (* -> *) -> *)
 cCreatePost now env@Env{..} =
   let
-    gen = Just . genCreate now
+    gen = Just . fmap CreatePost . genPost now
     exe (CreatePost pm) = do
       annotateShow pm
       annotateShow $ encode pm
@@ -335,24 +353,65 @@ cCreatePost now env@Env{..} =
       evalEither =<< liftIO (runClientM create servantClient)
   in
     Command gen exe [
-      Update $ \s cp o ->
-        posts . at o ?~ createToStatePost now cp $ s
+      Update $ \s (CreatePost p) o ->
+        posts . at o ?~ genToStatePost now p $ s
     ]
 
-createToStatePost ::
+--------------------------------------------------------------------------------
+-- UPDATE
+--------------------------------------------------------------------------------
+data UpdatePost (v :: * -> *) =
+  UpdatePost (Var Int v) PostMap
+  deriving (Show)
+
+instance HTraversable UpdatePost where
+  htraverse f (UpdatePost pId dmi) =
+    fmap (flip UpdatePost dmi) (htraverse f pId)
+
+cUpdatePost
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     , HasPosts state
+     , HasPostMaps state
+     )
+  => LocalTime
+  -> Env
+  -> Command n m (state :: (* -> *) -> *)
+cUpdatePost now env@Env{..} =
+  let
+    genId s = s ^. posts . to M.keys & Gen.element
+    gen s =
+      if s ^. posts & (not . null)
+      then Just $ UpdatePost <$> genId s <*> genPost now s
+      else Nothing
+    exe (UpdatePost pId pm) = do
+      annotateShow pm
+      annotateShow $ encode pm
+      let update = runIdentity . (DM.! PostId) <$> updatePost (auth env) (concrete pId) pm
+      evalEither =<< liftIO (runClientM update servantClient)
+  in
+    Command gen exe [
+      Require $ \s (UpdatePost varId _) ->
+        s ^. posts . at varId & not . null
+    , Update $ \s (UpdatePost pId p) _ ->
+        posts . at pId ?~ genToStatePost now p $ s
+    ]
+
+genToStatePost ::
   LocalTime
-  -> CreatePost v
   -> PostMap
-createToStatePost now (CreatePost pm) =
+  -> PostMap
+genToStatePost now pm =
   foldr ($) pm [
-      fixCreateStatus now
+      fixGenStatus now
     ]
 
-fixCreateStatus ::
+fixGenStatus ::
   LocalTime
   -> PostMap
   -> PostMap
-fixCreateStatus now pm =
+fixGenStatus now pm =
   case DM.lookup PostStatus pm of
     Just is ->
       let
@@ -370,14 +429,14 @@ fixCreateStatus now pm =
         DM.insert PostStatus status pm
     Nothing -> pm
 
-genCreate ::
+genPost ::
   ( MonadGen n
   , HasPostMaps state
   )
   => LocalTime
   -> state (v :: * -> *)
-  -> n (CreatePost v)
-genCreate now s = do
+  -> n PostMap
+genPost now s = do
   content <- genAlpha 1 500
   excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
   status <- Gen.enumBounded
@@ -414,8 +473,7 @@ genCreate now s = do
       ]
     -- gensV = [
     --   ]
-    f = fmap DM.fromList . traverse (\(kv :=> fv) -> fmap ((kv :=>) . pure) fv)
-  CreatePost <$> f gensI
+  DM.traverseWithKey (const (fmap pure)) $ DM.fromList gensI
 
 withinADay ::
   LocalTime

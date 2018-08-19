@@ -4,27 +4,23 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE InstanceSigs          #-}
-{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MagicHash             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeApplications      #-}
 
 module Data.GADT.Aeson where
 
 import           Data.Aeson            (Value, object, withObject, (.:?))
-import           Data.Aeson.Types      (FromJSON1, Parser, ToJSON1, toJSON1)
+import           Data.Aeson.Types      (FromJSON1, Parser)
 import           Data.Bool             (bool)
 import           Data.Dependent.Map    (DMap, DSum (..), GCompare (..), empty,
                                         insert, toList)
-import           Data.GADT.Compare     ((:~:) (Refl), GEq (..),
-                                        GOrdering (..))
 import           Data.Monoid           (First (First, getFirst))
 import           Data.Some             (Some (This))
-import           Data.Text             (Text, pack)
+import           Data.Text             (Text)
 import           GHC.Prim              (Proxy#, proxy#)
-import           GHC.TypeLits          (KnownSymbol, Symbol, symbolVal')
+import           GHC.TypeLits          (KnownSymbol, symbolVal')
 
 class FromJSON1 f => FromJSONViaKey k f where
   parseJSONViaKey ::  k a -> Value -> Parser (f a)
@@ -32,7 +28,7 @@ class FromJSON1 f => FromJSONViaKey k f where
 class ToJSONViaKey k f where
   toJSONViaKey :: k a -> f a -> Value
 
-class GKey k where
+class JSONKey k where
   toFieldName :: k a -> Text
   fromFieldName :: Text -> Maybe (Some k)
   keys :: [Some k]
@@ -42,52 +38,14 @@ class GKey k where
   fromFieldName = defaultFromFieldName
 
 defaultFromFieldName
-  :: GKey tag
+  :: JSONKey tag
   => Text
   -> Maybe (Some tag)
 defaultFromFieldName t =
   getFirst $ foldMap (\(This k) -> First $ bool Nothing (Just (This k)) (toFieldName k == t)) keys
 
-class EqViaKey k f where
-  eqViaKey :: k a -> f a -> f a -> Bool
-
-data FooKey (s :: Symbol) a where
-  I :: FooKey "i" Int
-
-instance KnownSymbol s => GKey (FooKey s) where
-  toFieldName (_ :: FooKey s a) = pack (symName @s)
-  keys = undefined
-
-  fromFieldName :: Text -> Maybe (Some (FooKey s))
-  fromFieldName = defaultFromFieldName
-
-instance GEq (FooKey s) where
-  geq I I = Just Refl
-
-instance GCompare (FooKey s) where
-  gcompare I I = GEQ
-
-instance ToJSON1 f => ToJSONViaKey (FooKey s) f where
-  toJSONViaKey I = toJSON1
-
-data L (key :: Symbol -> * -> *) a where
-  L :: KnownSymbol s => k s a -> L k a
-
-instance GKey (L FooKey) where
-  toFieldName (L ksa) = toFieldName ksa
-  keys = [This (L I)]
-
-instance GEq (L FooKey) where
-  geq (L I) (L I) = Just Refl
-
-instance GCompare (L FooKey) where
-  gcompare (L I) (L I) = GEQ
-
-data BarKey a where
-  S :: BarKey Int
-
 toJSONDMap ::
-  ( GKey k
+  ( JSONKey k
   , ToJSONViaKey k f
   )
   => DMap k f
@@ -102,7 +60,7 @@ toJSONDMap dm =
 -- a name for the object can be provided, which gives better error messages.
 mkParseJSON
   :: forall k f.
-    (GKey k, GCompare k, FromJSONViaKey k f)
+    (JSONKey k, GCompare k, FromJSONViaKey k f)
   => String
   -> Value
   -> Parser (DMap k f)

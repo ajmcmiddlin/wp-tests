@@ -66,11 +66,10 @@ import           GHC.Generics          (Generic)
 import           GHC.TypeLits          (KnownSymbol, Symbol)
 import           Web.HttpApiData       (ToHttpApiData (toQueryParam))
 
-import           Data.GADT.Aeson       (GKey (..), mkParseJSON, symName,
+import           Data.GADT.Aeson       (JSONKey (..), mkParseJSON, symName,
                                         toJSONDMap)
-import           Data.GADT.Aeson.TH    (deriveEqTag, deriveEqViaKey,
-                                        deriveFromJSONViaKey, deriveShowTag,
-                                        deriveToJSONViaKey)
+import           Data.GADT.Aeson.TH    (deriveEqTag, deriveFromJSONViaKey,
+                                        deriveShowTag, deriveToJSONViaKey)
 
 -- TODO ajmccluskey: maybe we can/should hide all of the JSON names in the types to keep everything
 -- together and simplify To/FromJSON instances.
@@ -111,7 +110,7 @@ instance (Applicative f, FromJSON1 f) => FromJSON (DMap PostKey f) where
   parseJSON = mkParseJSON "Post"
 
 -- TODO: use TH and Symbol to get rid of this
-instance GKey PostKey where
+instance JSONKey PostKey where
   toFieldName = \case
     PostDate -> "date"
     PostDateGmt -> "date_gmt"
@@ -577,5 +576,4 @@ deriveGShow ''PostKey
 deriveFromJSONViaKey ''PostKey
 deriveToJSONViaKey ''PostKey
 deriveShowTag ''PostKey
-deriveEqViaKey ''PostKey
 deriveEqTag ''PostKey

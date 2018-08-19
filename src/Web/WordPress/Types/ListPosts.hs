@@ -27,7 +27,7 @@ import           Data.Text                (Text)
 import           Data.Time                (LocalTime)
 import           Web.HttpApiData          (ToHttpApiData (toQueryParam))
 
-import           Data.GADT.Aeson          (GKey (..), toJSONDMap)
+import           Data.GADT.Aeson          (JSONKey (..), toJSONDMap)
 import           Data.GADT.Aeson.TH       (deriveEqTag, deriveShowTag,
                                            deriveToJSONViaKey)
 import           Servant.QueryParamMap    (ToQueryParamKey (..),
@@ -61,7 +61,7 @@ data ListPostsKey a where
 
 deriving instance Eq (ListPostsKey a)
 
-instance GKey ListPostsKey where
+instance JSONKey ListPostsKey where
   toFieldName = \case
     ListPostsContext -> "context"
     ListPostsPage -> "page"

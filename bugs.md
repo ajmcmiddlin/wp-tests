@@ -151,31 +151,10 @@ Right (fromList [])
 
 [posted to WordPress's trac 20180711T1230Z](https://core.trac.wordpress.org/ticket/44568)
 
-```
-=== Steps to reproduce
 
-Using the REST API:
+## Incorrect slug when resurrecting a trashed posted
 
-* Create a post
-* Run two deletes for created post concurrently:
-   1. Force delete (query params: `?force=true`)
-   2. Delete without forcing (do not specify `force` query parameter)
+### report
 
-=== Expected
+https://core.trac.wordpress.org/ticket/44805
 
-One delete to return `200 OK` and a valid return value. The other to return a `404 Not Found` or `410 Gone` depending on which one was successful.
-
-=== Result
-
-1. Force delete returns `200 OK` and an empty post object (normally returns a JSON object including keys `deleted` and `previous`).
-2. Delete without force returns a post object full of `null` (see below)
-
-INSERT OUTPUT FROM ABOVE
-
-=== Notes
-
-* WordPress is latest release version at time of writing (4.9.7)
-* Server OS is Linux (running in a VM with fresh install)
-* Default theme is installed
-* Basic-Auth plugin is the only plugin installed -- required for testing``
-```
