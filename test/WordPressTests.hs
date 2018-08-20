@@ -126,7 +126,7 @@ mkProp env@Env{..} gen exe = do
   now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
     commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost now, cGetPost, cUpdatePost now]
-    initialState = WPState $ M.empty
+    initialState = WPState M.empty
   actions <- gen commands initialState
 
   test $ do
