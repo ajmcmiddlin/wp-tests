@@ -9,7 +9,7 @@ context.
 
 ### Timestamp ignored when creating posts
 
-Two different dates may be provided -- GMT and local time -- however if both are provided, the GMT
+Two different dates may be provided --- GMT and local time --- however if both are provided, the GMT
 date is ignored entirely as evidenced by providing two completely different times.
 
 ### Status changes based on current time

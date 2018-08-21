@@ -16,7 +16,7 @@ module WordPressTests where
 
 import           Control.Lens                  (at, filtered, ix, sans, to,
                                                 (%~), (&), (?~), (^.), (^..),
-                                                (^?), _Just, _Wrapped)
+                                                (^?), _Just, _Wrapped, _Unwrapped)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
@@ -27,6 +27,7 @@ import           Data.Dependent.Sum            (DSum (..), (==>))
 import           Data.Foldable                 (traverse_)
 import           Data.Functor.Classes          (Eq1, Ord1)
 import           Data.Functor.Identity         (Identity (..))
+import           Data.List.NonEmpty            (NonEmpty ((:|)))
 import qualified Data.Map                      as M
 import           Data.Maybe                    (fromMaybe)
 import qualified Data.Text                     as T
@@ -36,6 +37,7 @@ import           Data.Time                     (LocalTime (LocalTime),
                                                 nominalDay, secondsToDiffTime,
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
+import           Data.Time.Extras              (nominalWithin)
 import           Network.HTTP.Types.Status     (gone410, notFound404)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
 import           Servant.Client                (ClientM, ServantError (..),
@@ -72,8 +74,9 @@ import           Web.WordPress.Types.Post      (Author (Author),
                                                 Status (..), mkCreatePR,
                                                 mkCreateR, mkSlug, trashSlug)
 
-import           Types                         (Env (..), HasPostMaps (..),
-                                                HasPosts (..),
+import           Types                         (Env (..), HasPosts (posts),
+                                                HasPostsList (postsList),
+                                                StatePost (StatePost),
                                                 WPState (WPState),
                                                 hasKeyMatchingPredicate)
 
@@ -160,7 +163,6 @@ cList, cListAuth ::
   ( MonadGen n
   , MonadIO m
   , MonadTest m
-  , HasPostMaps state
   , HasPosts state
   )
   => Env
@@ -172,7 +174,6 @@ cListAuth = mkCListPosts (Just . genListAuth) listPostsAuth
 mkCListPosts
   :: ( MonadIO m
      , MonadTest m
-     , HasPostMaps state
      , HasPosts state
      )
   => (state Symbolic -> Maybe (n (ListPosts Symbolic)))
@@ -224,12 +225,12 @@ lookupAndCheck s p = do
     pId = runIdentity $ p DM.! PostId
   annotateShow p
   case s ^. posts . at (Var (Concrete pId)) of
-    Just sp -> sp === DM.intersection p sp
-    Nothing -> failure
+    Just (StatePost sp) -> sp === DM.intersection p sp
+    Nothing             -> failure
 
 genList
   :: ( MonadGen n
-     , HasPostMaps state
+     , HasPosts state
      )
   => state Symbolic
   -> n (ListPosts v)
@@ -247,7 +248,7 @@ genList s = do
 
 genListAuth
   :: ( MonadGen n
-     , HasPostMaps state
+     , HasPosts state
      )
   => state Symbolic
   -> n (ListPosts v)
@@ -257,15 +258,15 @@ genListAuth s = do
   pure . ListPosts dmv $ DM.insert ListPostsStatus status dmi
 
 postsWhere
-  :: HasPostMaps state
+  :: HasPostsList state
   => state v
   -> (PostMap -> Bool)
   -> [PostMap]
 postsWhere s p =
-  s ^.. postMaps . traverse . filtered p
+  s ^.. postsList . traverse . _Wrapped . filtered p
 
 postsWithStatus
-  :: HasPostMaps state
+  :: HasPosts state
   => state v
   -> Status
   -> [PostMap]
@@ -321,6 +322,38 @@ cGetPost env@Env{..} =
         stateMap === pState
     ]
 
+fieldsEq ::
+  MonadTest m
+  => PostKey a
+  -> StatePost
+  -> PostMap
+  -> m ()
+fieldsEq k s m' =
+  assert . any (s ^. posts & (==) . expected k) $ m' DM.! k
+
+expected ::
+  PostKey a
+  -> StatePost
+  -> NonEmpty a
+expected k (StatePost m) =
+  case k of
+    PostStatus ->
+      let
+        status = runIdentity $ m DM.! PostStatus
+        dt = nominalDiff (s ^. statePosts . posts ) now
+      in
+        if | s == Future && (abs dt) < (nominalSecond * 10) -> Future :| [Publish]
+           | s == Future && dt > 0 -> Publish :| []
+           | _ -> s :| []
+
+postDate ::
+  PostMap
+  -> LocalTime
+postDate m =
+  -- Non-GMT date gets preference apparently. This was determined by creating a post with two dates
+  -- that didn't agree and seeing which one came back. Also YOLO `fromJust`. Some men just want to
+  -- watch the world burn.
+  runIdentity . fromJust $ DM.lookup PostDate m <|> DM.lookup PostDateGmt m
 
 --------------------------------------------------------------------------------
 -- CREATE
@@ -338,7 +371,6 @@ cCreatePost
      , MonadIO m
      , MonadTest m
      , HasPosts state
-     , HasPostMaps state
      )
   => LocalTime
   -> Env
@@ -373,7 +405,6 @@ cUpdatePost
      , MonadIO m
      , MonadTest m
      , HasPosts state
-     , HasPostMaps state
      )
   => LocalTime
   -> Env
@@ -431,7 +462,7 @@ fixGenStatus now pm =
 
 genPost ::
   ( MonadGen n
-  , HasPostMaps state
+  , HasPosts state
   )
   => LocalTime
   -> state (v :: * -> *)
@@ -475,19 +506,8 @@ genPost now s = do
     --   ]
   DM.traverseWithKey (const (fmap pure)) $ DM.fromList gensI
 
-withinADay ::
-  LocalTime
-  -> LocalTime
-  -> Bool
-withinADay a b =
-  let
-    a' = localTimeToUTC utc a
-    b' = localTimeToUTC utc b
-  in
-    abs (diffUTCTime a' b') < nominalDay
-
 existsPostWithSlug ::
-  HasPostMaps state
+  HasPosts state
   => state v
   -> Slug
   -> Bool

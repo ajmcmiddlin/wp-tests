@@ -25,17 +25,21 @@ data Env =
   , reset         :: IO ()
   }
 
-type Posts v = Map (Var Int v) PostMap
+-- We want to differentiate between post maps we keep in state and those we get back.
+newtype StatePost =
+  StatePost PostMap
+  deriving (Eq, Show)
+
+type Posts v = Map (Var Int v) StatePost
 
 class HasPosts s where
   posts :: Lens' (s v) (Posts v)
 
-class HasPostMaps (s :: (* -> *) -> *) where
-  postMaps :: Getter (s v) [PostMap]
+class HasPostsList (s :: (* -> *) -> *) where
+  postsList :: Getter (s v) [StatePost]
 
-class HasPostMap (s :: (* -> *) -> *) where
-  postMap :: Lens' (s v) PostMap
-
+-- class HasPostMap (s :: (* -> *) -> *) where
+--   postMap :: Lens' (s v) Posts
 
 newtype WPState (v :: * -> *) =
   WPState
@@ -46,8 +50,9 @@ newtype WPState (v :: * -> *) =
 instance HasPosts WPState where
   posts = posts
 
-instance HasPostMaps WPState where
-  postMaps = posts . to M.elems
+instance HasPostsList WPState where
+  postsList = posts . to M.elems
+
 
 hasKeyMatchingPredicate ::
   DM.GCompare k
@@ -59,4 +64,3 @@ hasKeyMatchingPredicate ka p dm =
   case DM.lookup ka dm of
     Just fa -> p fa
     Nothing -> False
-
