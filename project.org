@@ -1,0 +1,12 @@
+WP-TEST
+
+* Todo
+
+** TODO Change equality check for posts
+
+   Currently we do some shenanigans in the generator to avoid issues when checking equality. For
+   example, we filter out dates within a day of `now` when posts have a status of future because we
+   don't want the status to change while testing.
+
+   We could simply take these things into account in our post conditions rather than checking for
+   straight value equality.
