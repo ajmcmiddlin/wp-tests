@@ -439,7 +439,7 @@ genPost ::
 genPost now s = do
   content <- genAlpha 1 500
   excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
-  status <- Gen.enumBounded
+  status <- Gen.filter (/= Trash) Gen.enumBounded
   let
     -- If something is marked for publishing in the future then make sure our date is at least a
     -- day away so its status doesn't change during testing.
@@ -454,7 +454,7 @@ genPost now s = do
         -- We don't want empty slugs because then WordPress defaults them and we can't be
         -- certain about when things should be equal without implementing their defaulting logic.
       , PostSlug :=> genSlug
-      , PostStatus :=> Gen.filter (/= Trash) Gen.enumBounded
+      , PostStatus :=> pure status
      -- , PostPassword
       , PostTitle :=> mkCreateR <$> genAlpha 1 30
       , PostContent :=> pure (mkCreatePR content)
@@ -532,7 +532,7 @@ cDeletePostParallel env@Env{..} =
         forced' = fromMaybe False forced
 
         updateField :: forall a. PostKey a -> (a -> a) -> state v -> state v
-        updateField key f = posts . at varId . _Just . dmix key . _Wrapped %~ f
+        updateField key f = posts . ix varId . dmix key . _Wrapped %~ f
       in
         -- TODO overlapping patterns
         case (pOld, pOldStatus, forced') of
