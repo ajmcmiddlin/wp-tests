@@ -50,6 +50,7 @@ library
 test-suite state-tests
   other-modules:       Types
                        WordPressTests
+                       Data.Time.Extras
   build-depends:       base >=4.10 && <4.11
                      , aeson >=1.1.2.0 && <1.3
                      , bytestring >=0.9.1 && <0.11
