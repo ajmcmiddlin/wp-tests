@@ -10,3 +10,13 @@ WP-TEST
 
    We could simply take these things into account in our post conditions rather than checking for
    straight value equality.
+
+** TODO Work out why nixops errors out on deployment
+
+    We want deployment to be fully automated. The dumb but easy thing to do would be to write a
+    script that always reboots after running the first `deploy`, and then deploys again.
+
+** TODO Query IP address
+
+    Ideally we would query `nixops` to find out the IP of the deployed machine rather than manually
+    entering it into a script.
