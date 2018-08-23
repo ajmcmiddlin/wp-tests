@@ -324,9 +324,7 @@ cGetPost now env@Env{..} =
     ]
 
 fieldsEq ::
-  ( EqTag PostKey Identity
-  , MonadTest m
-  )
+  MonadTest m
   => LocalTime
   -> PostKey a
   -> StatePost
