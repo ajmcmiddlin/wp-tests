@@ -14,30 +14,32 @@
 
 module WordPressTests where
 
+import           Control.Applicative           ((<|>))
 import           Control.Lens                  (at, filtered, ix, sans, to,
                                                 (%~), (&), (?~), (^.), (^..),
-                                                (^?), _Just, _Wrapped, _Unwrapped)
+                                                (^?), _Just, _Wrapped)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
 import           Data.Dependent.Map            (DMap)
 import qualified Data.Dependent.Map            as DM
 import           Data.Dependent.Map.Lens       (dmix)
-import           Data.Dependent.Sum            (DSum (..), (==>))
+import           Data.Dependent.Sum            (DSum (..), (==>), EqTag (eqTagged))
 import           Data.Foldable                 (traverse_)
+import           Data.Functor                  ((<$), void)
 import           Data.Functor.Classes          (Eq1, Ord1)
+import           Data.Functor.Const            (Const (Const))
 import           Data.Functor.Identity         (Identity (..))
 import           Data.List.NonEmpty            (NonEmpty ((:|)))
 import qualified Data.Map                      as M
-import           Data.Maybe                    (fromMaybe)
+import           Data.Maybe                    (fromJust, fromMaybe)
 import qualified Data.Text                     as T
 import           Data.Time                     (LocalTime (LocalTime),
-                                                diffUTCTime, fromGregorian,
-                                                getCurrentTime, localTimeToUTC,
-                                                nominalDay, secondsToDiffTime,
+                                                fromGregorian, getCurrentTime,
+                                                secondsToDiffTime,
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
-import           Data.Time.Extras              (nominalWithin)
+import           Data.Time.Extras              (nominalDiff, nominalSecond)
 import           Network.HTTP.Types.Status     (gone410, notFound404)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
 import           Servant.Client                (ClientM, ServantError (..),
@@ -50,8 +52,8 @@ import           Hedgehog                      (Callback (..),
                                                 MonadGen, MonadTest, Parallel,
                                                 Property, PropertyT, Sequential,
                                                 Symbolic, TestT, Var (Var),
-                                                annotateShow, concrete, eval,
-                                                evalEither, evalIO,
+                                                annotateShow, assert, concrete,
+                                                eval, evalEither, evalIO,
                                                 executeParallel,
                                                 executeSequential, failure,
                                                 forAll, property, success, test,
@@ -75,9 +77,8 @@ import           Web.WordPress.Types.Post      (Author (Author),
                                                 mkCreateR, mkSlug, trashSlug)
 
 import           Types                         (Env (..), HasPosts (posts),
-                                                HasPostsList (postsList),
                                                 StatePost (StatePost),
-                                                WPState (WPState),
+                                                WPState (WPState), getStatePost,
                                                 hasKeyMatchingPredicate)
 
 wordpressTests
@@ -128,7 +129,7 @@ mkProp ::
 mkProp env@Env{..} gen exe = do
   now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
   let
-    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost now, cGetPost, cUpdatePost now]
+    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost now, cGetPost now, cUpdatePost now]
     initialState = WPState M.empty
   actions <- gen commands initialState
 
@@ -258,12 +259,12 @@ genListAuth s = do
   pure . ListPosts dmv $ DM.insert ListPostsStatus status dmi
 
 postsWhere
-  :: HasPostsList state
+  :: HasPosts state
   => state v
   -> (PostMap -> Bool)
   -> [PostMap]
 postsWhere s p =
-  s ^.. postsList . traverse . _Wrapped . filtered p
+  s ^.. posts . traverse . _Wrapped . filtered p
 
 postsWithStatus
   :: HasPosts state
@@ -297,9 +298,10 @@ cGetPost
      , MonadTest m
      , HasPosts state
      )
-  => Env
+  => LocalTime
+  -> Env
   -> Command n m state
-cGetPost env@Env{..} =
+cGetPost now env@Env{..} =
   let
     gen s =
       if s ^. posts & (not . null)
@@ -315,36 +317,44 @@ cGetPost env@Env{..} =
         s ^. posts . at varId & not . null
     , Ensure $ \_so sn (GetPost varId) p -> do
         stateMap <- eval $ (sn ^. posts) M.! varId
-        let
-          pState = DM.intersection p stateMap
         annotateShow stateMap
         annotateShow p
-        stateMap === pState
+        -- TODO clean this up
+        void . DM.traverseWithKey (\ka -> const $ Const () <$ fieldsEq now ka stateMap p) . getStatePost $ stateMap
     ]
 
 fieldsEq ::
-  MonadTest m
-  => PostKey a
+  ( EqTag PostKey Identity
+  , MonadTest m
+  )
+  => LocalTime
+  -> PostKey a
   -> StatePost
   -> PostMap
   -> m ()
-fieldsEq k s m' =
-  assert . any (s ^. posts & (==) . expected k) $ m' DM.! k
+fieldsEq now k s m' =
+  let
+    matches = eqTagged k k $ m' DM.! k
+  in
+    assert . any matches $ expected now k s
 
 expected ::
-  PostKey a
+  LocalTime
+  -> PostKey a
   -> StatePost
-  -> NonEmpty a
-expected k (StatePost m) =
+  -> NonEmpty (Identity a)
+expected now k (StatePost m) =
   case k of
     PostStatus ->
       let
-        status = runIdentity $ m DM.! PostStatus
-        dt = nominalDiff (s ^. statePosts . posts ) now
+        s =  runIdentity $ m DM.! PostStatus
+        dt = nominalDiff (postDate m) now
       in
-        if | s == Future && (abs dt) < (nominalSecond * 10) -> Future :| [Publish]
-           | s == Future && dt > 0 -> Publish :| []
-           | _ -> s :| []
+        if | s == Future && abs dt < (nominalSecond * 10) -> pure <$> Future :| [Publish]
+           | s == Future && dt > 0 -> pure <$> Publish :| []
+           | otherwise -> pure s :| []
+    -- TODO: be better
+    _ -> pure $ m DM.! k
 
 postDate ::
   PostMap
@@ -353,7 +363,8 @@ postDate m =
   -- Non-GMT date gets preference apparently. This was determined by creating a post with two dates
   -- that didn't agree and seeing which one came back. Also YOLO `fromJust`. Some men just want to
   -- watch the world burn.
-  runIdentity . fromJust $ DM.lookup PostDate m <|> DM.lookup PostDateGmt m
+  runIdentity . fromJust $
+    DM.lookup PostDate m <|> DM.lookup PostDateGmt m
 
 --------------------------------------------------------------------------------
 -- CREATE
@@ -377,7 +388,7 @@ cCreatePost
   -> Command n m (state :: (* -> *) -> *)
 cCreatePost now env@Env{..} =
   let
-    gen = Just . fmap CreatePost . genPost now
+    gen = Just . fmap CreatePost . genPost
     exe (CreatePost pm) = do
       annotateShow pm
       annotateShow $ encode pm
@@ -414,7 +425,7 @@ cUpdatePost now env@Env{..} =
     genId s = s ^. posts . to M.keys & Gen.element
     gen s =
       if s ^. posts & (not . null)
-      then Just $ UpdatePost <$> genId s <*> genPost now s
+      then Just $ UpdatePost <$> genId s <*> genPost s
       else Nothing
     exe (UpdatePost pId pm) = do
       annotateShow pm
@@ -432,9 +443,9 @@ cUpdatePost now env@Env{..} =
 genToStatePost ::
   LocalTime
   -> PostMap
-  -> PostMap
+  -> StatePost
 genToStatePost now pm =
-  foldr ($) pm [
+  StatePost $ foldr ($) pm [
       fixGenStatus now
     ]
 
@@ -464,28 +475,23 @@ genPost ::
   ( MonadGen n
   , HasPosts state
   )
-  => LocalTime
-  -> state (v :: * -> *)
+  => state (v :: * -> *)
   -> n PostMap
-genPost now s = do
+genPost s = do
   content <- genAlpha 1 500
   excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
-  status <- Gen.enumBounded
+  status <- Gen.filter (/= Trash) Gen.enumBounded
   let
     -- If something is marked for publishing in the future then make sure our date is at least a
     -- day away so its status doesn't change during testing.
-    genDate =
-      if status == Future
-      then Gen.filter (not . withinADay now) genLocalTime
-      else genLocalTime
     excerpt = bool content excerpt' (T.null excerpt')
     genSlug = Gen.filter (not . existsPostWithSlug s) . fmap mkSlug $ genAlpha 1 300
     gensI = [
-        PostDateGmt :=> genDate
+        PostDateGmt :=> genLocalTime
         -- We don't want empty slugs because then WordPress defaults them and we can't be
         -- certain about when things should be equal without implementing their defaulting logic.
       , PostSlug :=> genSlug
-      , PostStatus :=> Gen.filter (/= Trash) Gen.enumBounded
+      , PostStatus :=> pure status
      -- , PostPassword
       , PostTitle :=> mkCreateR <$> genAlpha 1 30
       , PostContent :=> pure (mkCreatePR content)
@@ -513,9 +519,10 @@ existsPostWithSlug ::
   -> Bool
 existsPostWithSlug s slug =
   let
-    isMatchingSlug = any (hasKeyMatchingPredicate PostSlug (== Identity slug)) $ s ^. postMaps
+    pms = s ^.. posts . traverse . _Wrapped
+    isMatchingSlug = any (hasKeyMatchingPredicate PostSlug (== Identity slug))
   in
-    (not . null $ Identity slug) && isMatchingSlug
+    (not . null $ Identity slug) && isMatchingSlug pms
 
 
 --------------------------------------------------------------------------------
@@ -552,7 +559,7 @@ cDeletePostParallel env@Env{..} =
         forced' = fromMaybe False forced
 
         updateField :: forall a. PostKey a -> (a -> a) -> state v -> state v
-        updateField key f = posts . at varId . _Just . dmix key . _Wrapped %~ f
+        updateField key f = posts . at varId . _Just . _Wrapped . dmix key . _Wrapped %~ f
       in
         -- TODO overlapping patterns
         case (pOld, pOldStatus, forced') of
@@ -626,7 +633,7 @@ postFieldAt ::
   -> Var Int v
   -> Maybe a
 postFieldAt s key varId  =
-  s ^? posts . ix varId . dmix key . _Wrapped
+  s ^? posts . ix varId . _Wrapped . dmix key . _Wrapped
 
 genLocalTime
   :: MonadGen n

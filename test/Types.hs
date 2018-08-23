@@ -1,18 +1,23 @@
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 
 module Types where
 
-import           Control.Lens             (Getter, Lens', to)
+import           Control.Lens             (Lens', Rewrapped,
+                                           Wrapped (Unwrapped, _Wrapped'), iso)
 import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
 import           Data.Map                 (Map)
-import qualified Data.Map                 as M
 import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
 import           Web.WordPress.Types.Post (PostMap)
+
+import GHC.Generics (Generic)
 
 import           Hedgehog                 (Var)
 
@@ -27,19 +32,17 @@ data Env =
 
 -- We want to differentiate between post maps we keep in state and those we get back.
 newtype StatePost =
-  StatePost PostMap
-  deriving (Eq, Show)
+  StatePost { getStatePost :: PostMap}
+  deriving (Eq, Show, Generic)
+
+instance Wrapped StatePost
+instance Rewrapped StatePost StatePost
 
 type Posts v = Map (Var Int v) StatePost
 
 class HasPosts s where
   posts :: Lens' (s v) (Posts v)
 
-class HasPostsList (s :: (* -> *) -> *) where
-  postsList :: Getter (s v) [StatePost]
-
--- class HasPostMap (s :: (* -> *) -> *) where
---   postMap :: Lens' (s v) Posts
 
 newtype WPState (v :: * -> *) =
   WPState
@@ -49,9 +52,6 @@ newtype WPState (v :: * -> *) =
 
 instance HasPosts WPState where
   posts = posts
-
-instance HasPostsList WPState where
-  postsList = posts . to M.elems
 
 
 hasKeyMatchingPredicate ::
