@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -7,8 +7,7 @@
 
 module Types where
 
-import           Control.Lens             (Lens', Rewrapped,
-                                           Wrapped (Unwrapped, _Wrapped'), iso)
+import           Control.Lens             (Lens', Rewrapped, Wrapped, lens)
 import           Data.ByteString          (ByteString)
 import           Data.Dependent.Map       (DMap)
 import qualified Data.Dependent.Map       as DM
@@ -17,7 +16,7 @@ import           Database.MySQL.Base      (ConnectInfo)
 import           Servant.Client           (ClientEnv)
 import           Web.WordPress.Types.Post (PostMap)
 
-import GHC.Generics (Generic)
+import           GHC.Generics             (Generic)
 
 import           Hedgehog                 (Var)
 
