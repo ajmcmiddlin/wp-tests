@@ -50,7 +50,7 @@ newtype WPState (v :: * -> *) =
   deriving (Eq, Show)
 
 instance HasPosts WPState where
-  posts = posts
+  posts = lens _posts (const WPState)
 
 
 hasKeyMatchingPredicate ::
