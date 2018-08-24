@@ -127,9 +127,9 @@ mkProp ::
   -> ExeFn (TestT IO) WPState exeModel
   -> PropertyT IO ()
 mkProp env@Env{..} gen exe = do
-  now <- liftIO (utcToLocalTime utc <$> getCurrentTime)
+  now <- getNow
   let
-    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost now, cGetPost now, cUpdatePost now]
+    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost, cGetPost now, cUpdatePost now]
     initialState = WPState M.empty
   actions <- gen commands initialState
 
@@ -137,6 +137,11 @@ mkProp env@Env{..} gen exe = do
     evalIO reset
     exe initialState actions
 
+getNow ::
+  MonadIO m
+  => m LocalTime
+getNow =
+  liftIO (utcToLocalTime utc <$> getCurrentTime)
 
 --------------------------------------------------------------------------------
 -- LIST
@@ -188,13 +193,12 @@ mkCListPosts gen list env@Env{..} =
 
     lupPerPage = lup 10 ListPostsPerPage
 
-    exe (ListPosts dmv dmi) =
+    exe (ListPosts dmv dmi) = do
       let
         dmi' = DM.map (\(Concrete a) -> pure a) dmv
         dm = DM.union dmi' dmi
         l = list (auth env) dm
-      in
-        evalEither =<< liftIO (runClientM l servantClient)
+      (,) <$> getNow <*> (evalEither =<< liftIO (runClientM l servantClient))
   in
     Command gen exe [
       Require $ \s (ListPosts _ lpi) ->
@@ -203,7 +207,7 @@ mkCListPosts gen list env@Env{..} =
           numPages' = numPages numPosts $ lupPerPage lpi
         in
           lup 1 ListPostsPage lpi <= numPages'
-    , Ensure $ \so _sn (ListPosts _ lpi) ps -> do
+    , Ensure $ \so _sn (ListPosts _ lpi) (now, ps) -> do
         annotateShow $ so ^. posts
         annotateShow ps
         let
@@ -211,22 +215,23 @@ mkCListPosts gen list env@Env{..} =
           perPage = lupPerPage lpi
           eLength = length . take perPage $ postsWithStatus so pws
         eLength === length ps
-        traverse_ (lookupAndCheck so) ps
+        traverse_ (lookupAndCheck now so) ps
     ]
 
 lookupAndCheck ::
   ( HasPosts state
   , MonadTest m
   )
-  => state Concrete
+  => LocalTime
+  -> state Concrete
   -> PostMap
   -> m ()
-lookupAndCheck s p = do
+lookupAndCheck now s p = do
   let
     pId = runIdentity $ p DM.! PostId
   annotateShow p
   case s ^. posts . at (Var (Concrete pId)) of
-    Just (StatePost sp) -> sp === DM.intersection p sp
+    Just sp -> postsEq now sp p
     Nothing             -> failure
 
 genList
@@ -319,9 +324,22 @@ cGetPost now env@Env{..} =
         stateMap <- eval $ (sn ^. posts) M.! varId
         annotateShow stateMap
         annotateShow p
-        -- TODO clean this up
-        void . DM.traverseWithKey (\ka -> const $ Const () <$ fieldsEq now ka stateMap p) . getStatePost $ stateMap
+        postsEq now stateMap p
     ]
+
+postsEq ::
+  forall m.
+  MonadTest m
+  => LocalTime
+  -> StatePost
+  -> PostMap
+  -> m ()
+postsEq now s m =
+  let
+    f :: PostKey a -> Identity a -> m (Const () a)
+    f ka = const $ Const () <$ fieldsEq now ka s m
+  in
+    void . DM.traverseWithKey f . getStatePost $ s
 
 fieldsEq ::
   MonadTest m
@@ -330,9 +348,9 @@ fieldsEq ::
   -> StatePost
   -> PostMap
   -> m ()
-fieldsEq now k s m' =
+fieldsEq now k s m =
   let
-    matches = eqTagged k k $ m' DM.! k
+    matches = eqTagged k k $ m DM.! k
   in
     assert . any matches $ expected now k s
 
@@ -349,7 +367,7 @@ expected now k (StatePost m) =
         dt = nominalDiff (postDate m) now
       in
         if | s == Future && abs dt < (nominalSecond * 10) -> pure <$> Future :| [Publish]
-           | s == Future && dt > 0 -> pure <$> Publish :| []
+           | s == Future && dt < 0 -> pure <$> Publish :| []
            | otherwise -> pure s :| []
     -- TODO: be better
     _ -> pure $ m DM.! k
@@ -381,10 +399,9 @@ cCreatePost
      , MonadTest m
      , HasPosts state
      )
-  => LocalTime
-  -> Env
+  => Env
   -> Command n m (state :: (* -> *) -> *)
-cCreatePost now env@Env{..} =
+cCreatePost env@Env{..} =
   let
     gen = Just . fmap CreatePost . genPost
     exe (CreatePost pm) = do
@@ -395,7 +412,7 @@ cCreatePost now env@Env{..} =
   in
     Command gen exe [
       Update $ \s (CreatePost p) o ->
-        posts . at o ?~ genToStatePost now p $ s
+        posts . at o ?~ StatePost p $ s
     ]
 
 --------------------------------------------------------------------------------
@@ -435,39 +452,8 @@ cUpdatePost now env@Env{..} =
       Require $ \s (UpdatePost varId _) ->
         s ^. posts . at varId & not . null
     , Update $ \s (UpdatePost pId p) _ ->
-        posts . at pId ?~ genToStatePost now p $ s
+        posts . at pId ?~ StatePost p $ s
     ]
-
-genToStatePost ::
-  LocalTime
-  -> PostMap
-  -> StatePost
-genToStatePost now pm =
-  StatePost $ foldr ($) pm [
-      fixGenStatus now
-    ]
-
-fixGenStatus ::
-  LocalTime
-  -> PostMap
-  -> PostMap
-fixGenStatus now pm =
-  case DM.lookup PostStatus pm of
-    Just is ->
-      let
-        haveDateLocal = DM.member PostDate pm
-        fieldBeforeNow f = hasKeyMatchingPredicate f (< Identity now) pm
-        fieldAfterNow f = hasKeyMatchingPredicate f (> Identity now) pm
-        dateBeforeNow = (not haveDateLocal && fieldBeforeNow PostDateGmt) || fieldBeforeNow PostDate
-        dateAfterNow = (not haveDateLocal && fieldAfterNow PostDateGmt) || fieldAfterNow PostDate
-        hasStatus = ($ pm) . hasKeyMatchingPredicate PostStatus . (==) . Identity
-        status =
-          if | hasStatus Future && dateBeforeNow -> Identity Publish
-             | hasStatus Publish && dateAfterNow -> Identity Future
-             | otherwise -> is
-      in
-        DM.insert PostStatus status pm
-    Nothing -> pm
 
 genPost ::
   ( MonadGen n
