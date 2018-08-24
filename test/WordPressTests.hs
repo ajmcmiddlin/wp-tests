@@ -129,7 +129,7 @@ mkProp ::
 mkProp env@Env{..} gen exe = do
   now <- getNow
   let
-    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost, cGetPost now, cUpdatePost now]
+    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost, cGetPost now, cUpdatePost]
     initialState = WPState M.empty
   actions <- gen commands initialState
 
@@ -142,6 +142,17 @@ getNow ::
   => m LocalTime
 getNow =
   liftIO (utcToLocalTime utc <$> getCurrentTime)
+
+genId ::
+  ( HasPosts s
+  , MonadGen n
+  )
+  => s v
+  -> Maybe (n (Var Int v))
+genId s =
+  if s ^. posts & null
+  then Nothing
+  else Just $ s ^. posts . to M.keys & Gen.element
 
 --------------------------------------------------------------------------------
 -- LIST
@@ -309,9 +320,7 @@ cGetPost
 cGetPost now env@Env{..} =
   let
     gen s =
-      if s ^. posts & (not . null)
-      then Just $ GetPost <$> (s ^. posts . to M.keys & Gen.element)
-      else Nothing
+      (fmap . fmap) GetPost $ genId s
     exe (GetPost varId) = do
       let
         get = getPost (auth env) (concrete varId)
@@ -432,16 +441,12 @@ cUpdatePost
      , MonadTest m
      , HasPosts state
      )
-  => LocalTime
-  -> Env
+  => Env
   -> Command n m (state :: (* -> *) -> *)
-cUpdatePost now env@Env{..} =
+cUpdatePost env@Env{..} =
   let
-    genId s = s ^. posts . to M.keys & Gen.element
     gen s =
-      if s ^. posts & (not . null)
-      then Just $ UpdatePost <$> genId s <*> genPost s
-      else Nothing
+      (flip UpdatePost <$> genPost s <*>) <$> genId s
     exe (UpdatePost pId pm) = do
       annotateShow pm
       annotateShow $ encode pm
