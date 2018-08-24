@@ -22,7 +22,7 @@ import           Data.Text             (Text)
 import           GHC.Prim              (Proxy#, proxy#)
 import           GHC.TypeLits          (KnownSymbol, symbolVal')
 
-class FromJSON1 f => FromJSONViaKey k f where
+class FromJSONViaKey k f where
   parseJSONViaKey ::  k a -> Value -> Parser (f a)
 
 class ToJSONViaKey k f where
