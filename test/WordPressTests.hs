@@ -129,7 +129,7 @@ mkProp ::
 mkProp env@Env{..} gen exe = do
   now <- getNow
   let
-    commands = ($ env) <$> [cDeletePostParallel, cList, cListAuth, cCreatePost, cGetPost now, cUpdatePost]
+    commands = ($ env) <$> [cDeletePost, cList, cListAuth, cCreatePost, cGetPost now, cUpdatePost]
     initialState = WPState M.empty
   actions <- gen commands initialState
 
@@ -525,7 +525,7 @@ instance HTraversable DeletePost where
   htraverse f (DeletePost (Var postId) force) =
     ($ force) . DeletePost . Var <$> f postId
 
-cDeletePostParallel ::
+cDeletePost ::
   forall n m state.
   ( MonadGen n
   , MonadIO m
@@ -533,7 +533,7 @@ cDeletePostParallel ::
   )
   => Env
   -> Command n m (state :: (* -> *) -> *)
-cDeletePostParallel env@Env{..} =
+cDeletePost env@Env{..} =
   let
     exe (DeletePost varId force) =
       liftIO $ runClientM (getDelete (auth env) (concrete varId) force) servantClient
