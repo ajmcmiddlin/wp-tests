@@ -210,28 +210,28 @@ postDate m =
 --------------------------------------------------------------------------------
 
 -- Create inputs are a strict subset of those in posts, so reuse them.
-createKeys
-  :: [Some PostKey]
-createKeys = [
-    This PostDate
-  , This PostDateGmt
-  , This PostSlug
-  , This PostStatus
-  , This PostPassword
-  , This PostTitle
-  , This PostContent
-  , This PostAuthor
-  , This PostExcerpt
-  , This PostFeaturedMedia
-  , This PostCommentStatus
-  , This PostPingStatus
-  , This PostFormat
-  , This PostMeta
-  , This PostSticky
-  , This PostTemplate
-  , This PostCategories
-  , This PostTags
-  ]
+-- createKeys
+--   :: [Some PostKey]
+-- createKeys = [
+--     This PostDate
+--   , This PostDateGmt
+--   , This PostSlug
+--   , This PostStatus
+--   , This PostPassword
+--   , This PostTitle
+--   , This PostContent
+--   , This PostAuthor
+--   , This PostExcerpt
+--   , This PostFeaturedMedia
+--   , This PostCommentStatus
+--   , This PostPingStatus
+--   , This PostFormat
+--   , This PostMeta
+--   , This PostSticky
+--   , This PostTemplate
+--   , This PostCategories
+--   , This PostTags
+--   ]
 
 -- | When a post is force (fully) deleted, the return type changes slightly
 data DeletedPost =
