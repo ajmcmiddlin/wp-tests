@@ -49,6 +49,7 @@ library
 
 test-suite state-tests
   other-modules:       Web.WordPress.Test.Types
+                       Web.WordPress.Test.Expected
                        WordPressTests
                        Data.Time.Extras
   build-depends:       base >=4.10 && <4.11

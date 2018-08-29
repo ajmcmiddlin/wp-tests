@@ -76,6 +76,7 @@ import           Web.WordPress.Types.Post      (Author (Author),
                                                 Status (..), mkCreatePR,
                                                 mkCreateR, mkSlug, trashSlug)
 
+import           Web.WordPress.Test.Expected   (expected)
 import           Web.WordPress.Test.Types      (Env (..), HasPosts (posts),
                                                 StatePost (StatePost),
                                                 WPState (WPState), getStatePost,
@@ -383,37 +384,6 @@ fieldsEqTest ::
   -> m ()
 fieldsEqTest now k s m =
   assert $ fieldsEq now k s m
-
-expected ::
-  LocalTime
-  -> PostKey a
-  -> StatePost
-  -> NonEmpty (Identity a)
-expected now k (StatePost m) =
-  case k of
-    PostStatus ->
-      let
-        s =  runIdentity $ m DM.! PostStatus
-        dt = nominalDiff (postDate m) now
-        isCloseToCutover = abs dt < (nominalSecond * 10)
-      in
-        if | elem s [Future, Publish] && isCloseToCutover ->
-               pure <$> Future :| [Publish]
-           | s == Future && dt < 0 -> pure Publish :| []
-           | s == Publish && dt > 0 -> pure Future :| []
-           | otherwise -> pure s :| []
-    -- TODO: be better
-    _ -> pure $ m DM.! k
-
-postDate ::
-  PostMap
-  -> LocalTime
-postDate m =
-  -- Non-GMT date gets preference apparently. This was determined by creating a post with two dates
-  -- that didn't agree and seeing which one came back. Also YOLO `fromJust`. Some men just want to
-  -- watch the world burn.
-  runIdentity . fromJust $
-    DM.lookup PostDate m <|> DM.lookup PostDateGmt m
 
 --------------------------------------------------------------------------------
 -- CREATE

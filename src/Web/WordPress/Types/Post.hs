@@ -44,6 +44,9 @@ module Web.WordPress.Types.Post
   , DeletedPost (..)
   , ForceDelete (..)
   , NoForceDelete (..)
+
+  -- * Helpers
+  , postDate
   ) where
 
 import           Control.Applicative   ((<|>))
@@ -54,7 +57,8 @@ import           Data.Aeson            (FromJSON (..), ToJSON (..),
 import           Data.Aeson.Types      (FromJSON1, Result (..), ToJSON1 (..),
                                         parse)
 import           Data.Dependent.Map    (DMap)
-import           Data.Functor.Identity (Identity)
+import qualified Data.Dependent.Map    as DM
+import           Data.Functor.Identity (Identity (runIdentity))
 import           Data.GADT.Compare.TH  (deriveGCompare, deriveGEq)
 import           Data.GADT.Show.TH     (deriveGShow)
 import           Data.Semigroup        ((<>))
@@ -193,6 +197,13 @@ instance JSONKey PostKey where
 
 type PostMap = DMap PostKey Identity
 
+postDate ::
+  PostMap
+  -> Maybe LocalTime
+postDate m =
+  -- Non-GMT date gets preference apparently. This was determined by creating a post with two dates
+  -- that didn't agree and seeing which one came back.
+  runIdentity <$> (DM.lookup PostDate m <|> DM.lookup PostDateGmt m)
 
 --------------------------------------------------------------------------------
 -- CREATE
