@@ -14,7 +14,6 @@
 
 module WordPressTests where
 
-import           Control.Applicative           ((<|>))
 import           Control.Lens                  (at, filtered, ix, sans, to,
                                                 (%~), (&), (?~), (^.), (^..),
                                                 (^?), _Just, _Wrapped)
@@ -24,23 +23,23 @@ import           Data.Bool                     (bool)
 import           Data.Dependent.Map            (DMap)
 import qualified Data.Dependent.Map            as DM
 import           Data.Dependent.Map.Lens       (dmix)
-import           Data.Dependent.Sum            (DSum (..), (==>), EqTag (eqTagged))
+import           Data.Dependent.Sum            (DSum (..), EqTag (eqTagged),
+                                                (==>))
 import           Data.Foldable                 (traverse_)
-import           Data.Functor                  ((<$), void)
+import           Data.Functor                  (void, (<$))
 import           Data.Functor.Classes          (Eq1, Ord1)
 import           Data.Functor.Const            (Const (Const))
 import           Data.Functor.Identity         (Identity (..))
-import           Data.List.NonEmpty            (NonEmpty ((:|)))
 import qualified Data.Map                      as M
-import           Data.Maybe                    (fromJust, fromMaybe)
+import           Data.Maybe                    (fromMaybe)
 import qualified Data.Text                     as T
 import           Data.Time                     (LocalTime (LocalTime),
                                                 fromGregorian, getCurrentTime,
                                                 secondsToDiffTime,
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
-import           Data.Time.Extras              (nominalDiff, nominalSecond)
-import           Network.HTTP.Types.Status     (gone410, notFound404, badRequest400)
+import           Network.HTTP.Types.Status     (badRequest400, gone410,
+                                                notFound404)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
 import           Servant.Client                (ClientM, ServantError (..),
                                                 runClientM)
