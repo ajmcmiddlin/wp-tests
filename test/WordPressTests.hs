@@ -17,6 +17,7 @@ module WordPressTests where
 import           Control.Lens                  (at, filtered, ix, sans, to,
                                                 (%~), (&), (?~), (^.), (^..),
                                                 (^?), _Just, _Wrapped)
+import           Control.Monad                 (unless)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Data.Aeson                    (encode)
 import           Data.Bool                     (bool)
@@ -58,6 +59,7 @@ import           Hedgehog                      (Callback (..),
                                                 forAll, property, success, test,
                                                 withRetries, (===))
 import qualified Hedgehog.Gen                  as Gen
+import           Hedgehog.Internal.Property    (failDiff)
 import qualified Hedgehog.Range                as Range
 import           Test.Tasty                    (TestTree, testGroup)
 import           Test.Tasty.Hedgehog           (testProperty)
@@ -387,7 +389,8 @@ fieldsEqTest ::
   -> PostMap
   -> m ()
 fieldsEqTest now k s m =
-  assert $ fieldsEq now k s m
+  unless (fieldsEq now k s m) $
+    failDiff (getStatePost s) (DM.intersection m (getStatePost s))
 
 --------------------------------------------------------------------------------
 -- CREATE
