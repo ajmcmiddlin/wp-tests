@@ -40,7 +40,7 @@ import           Data.Time                     (LocalTime (LocalTime),
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
 import           Data.Time.Extras              (nominalDiff, nominalSecond)
-import           Network.HTTP.Types.Status     (gone410, notFound404, status500)
+import           Network.HTTP.Types.Status     (gone410, notFound404, badRequest400)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
 import           Servant.Client                (ClientM, ServantError (..),
                                                 runClientM)
@@ -215,18 +215,18 @@ mkCListPosts gen list env@Env{..} =
           pws = postsWithStatus now so $ lup Publish ListPostsStatus lpi
           numPages' = numPages (length pws) $ lupPerPage lpi
           eLength = length . take (lupPerPage lpi) $ pws
-          ePages = lup 1 ListPostsPage lpi
+          ePage = lup 1 ListPostsPage lpi
         in
           case ps of
             Right ps' -> do
               annotateShow $ so ^. posts
               annotateShow ps'
-              assert $ ePages <= numPages'
+              assert $ ePage <= numPages'
               eLength === length ps'
               traverse_ (lookupAndCheck now so) ps'
             Left FailureResponse{..} -> do
-              assert $ ePages > numPages'
-              responseStatus === status500
+              assert $ ePage > numPages'
+              responseStatus === badRequest400
             Left _ -> failure
     ]
 
@@ -256,12 +256,13 @@ genList s = do
   status <- Gen.enumBounded
   perPage <- Gen.int (Range.linear 1 100)
   let
-    numPosts = length $ postsWithStatus s status
+    numPosts = s ^. posts & length
     numPages' = numPages numPosts perPage
   page <- Gen.int (Range.linear 1 numPages')
   pure . ListPosts DM.empty $ DM.fromList [
       ListPostsPerPage ==> perPage
     , ListPostsPage ==> page
+    , ListPostsStatus ==> status
     ]
 
 genListAuth
@@ -394,9 +395,12 @@ expected now k (StatePost m) =
       let
         s =  runIdentity $ m DM.! PostStatus
         dt = nominalDiff (postDate m) now
+        isCloseToCutover = abs dt < (nominalSecond * 10)
       in
-        if | s == Future && abs dt < (nominalSecond * 10) -> pure <$> Future :| [Publish]
-           | s == Future && dt < 0 -> pure <$> Publish :| []
+        if | elem s [Future, Publish] && isCloseToCutover ->
+               pure <$> Future :| [Publish]
+           | s == Future && dt < 0 -> pure Publish :| []
+           | s == Publish && dt > 0 -> pure Future :| []
            | otherwise -> pure s :| []
     -- TODO: be better
     _ -> pure $ m DM.! k
