@@ -251,7 +251,7 @@ lookupAndCheck now s p = do
   annotateShow p
   case s ^. posts . at (Var (Concrete pId)) of
     Just sp -> postsEq now sp p
-    Nothing             -> failure
+    Nothing -> failure
 
 genList
   :: ( MonadGen n
