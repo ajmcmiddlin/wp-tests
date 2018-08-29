@@ -216,18 +216,25 @@ mkCListPosts gen list env@Env{..} =
           numPages' = numPages (length pws) $ lupPerPage lpi
           eLength = length . take (lupPerPage lpi) $ pws
           ePage = lup 1 ListPostsPage lpi
+          dumpVars = do
+            annotateShow $ so ^. posts
+            annotateShow ps
+            annotateShow ePage
+            annotateShow numPages'
         in
           case ps of
             Right ps' -> do
-              annotateShow $ so ^. posts
-              annotateShow ps'
-              assert $ ePage <= numPages'
+              dumpVars
+              assert (ePage <= numPages')
               eLength === length ps'
               traverse_ (lookupAndCheck now so) ps'
             Left FailureResponse{..} -> do
+              dumpVars
               assert $ ePage > numPages'
               responseStatus === badRequest400
-            Left _ -> failure
+            Left _ -> do
+              dumpVars
+              failure
     ]
 
 lookupAndCheck ::
