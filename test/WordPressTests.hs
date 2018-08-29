@@ -40,7 +40,7 @@ import           Data.Time                     (LocalTime (LocalTime),
                                                 timeToTimeOfDay, utc,
                                                 utcToLocalTime)
 import           Data.Time.Extras              (nominalDiff, nominalSecond)
-import           Network.HTTP.Types.Status     (gone410, notFound404)
+import           Network.HTTP.Types.Status     (gone410, notFound404, status500)
 import           Servant.API                   (BasicAuthData (BasicAuthData))
 import           Servant.Client                (ClientM, ServantError (..),
                                                 runClientM)
@@ -179,7 +179,6 @@ instance HTraversable ListPosts where
 cList, cListAuth ::
   ( MonadGen n
   , MonadIO m
-  , MonadTest m
   , HasPosts state
   )
   => Env
@@ -190,7 +189,6 @@ cListAuth = mkCListPosts (Just . genListAuth) listPostsAuth
 -- TODO: subclass `HasPost*` to avoid so many constraints?
 mkCListPosts
   :: ( MonadIO m
-     , MonadTest m
      , HasPosts state
      )
   => (state Symbolic -> Maybe (n (ListPosts Symbolic)))
@@ -209,24 +207,27 @@ mkCListPosts gen list env@Env{..} =
         dmi' = DM.map (\(Concrete a) -> pure a) dmv
         dm = DM.union dmi' dmi
         l = list (auth env) dm
-      (,) <$> getNow <*> (evalEither =<< liftIO (runClientM l servantClient))
+      (,) <$> getNow <*> liftIO (runClientM l servantClient)
   in
     Command gen exe [
-      Require $ \s (ListPosts _ lpi) ->
+      Ensure $ \so _sn (ListPosts _ lpi) (now, ps) ->
         let
-          numPosts = length . postsWithStatus s $ lup Publish ListPostsStatus lpi
-          numPages' = numPages numPosts $ lupPerPage lpi
+          pws = postsWithStatus now so $ lup Publish ListPostsStatus lpi
+          numPages' = numPages (length pws) $ lupPerPage lpi
+          eLength = length . take (lupPerPage lpi) $ pws
+          ePages = lup 1 ListPostsPage lpi
         in
-          lup 1 ListPostsPage lpi <= numPages'
-    , Ensure $ \so _sn (ListPosts _ lpi) (now, ps) -> do
-        annotateShow $ so ^. posts
-        annotateShow ps
-        let
-          pws = lup Publish ListPostsStatus lpi
-          perPage = lupPerPage lpi
-          eLength = length . take perPage $ postsWithStatus so pws
-        eLength === length ps
-        traverse_ (lookupAndCheck now so) ps
+          case ps of
+            Right ps' -> do
+              annotateShow $ so ^. posts
+              annotateShow ps'
+              assert $ ePages <= numPages'
+              eLength === length ps'
+              traverse_ (lookupAndCheck now so) ps'
+            Left FailureResponse{..} -> do
+              assert $ ePages > numPages'
+              responseStatus === status500
+            Left _ -> failure
     ]
 
 lookupAndCheck ::
@@ -277,18 +278,19 @@ genListAuth s = do
 postsWhere
   :: HasPosts state
   => state v
-  -> (PostMap -> Bool)
-  -> [PostMap]
+  -> (StatePost-> Bool)
+  -> [StatePost]
 postsWhere s p =
-  s ^.. posts . traverse . _Wrapped . filtered p
+  s ^.. posts . traverse . filtered p
 
 postsWithStatus
   :: HasPosts state
-  => state v
+  => LocalTime
+  -> state v
   -> Status
-  -> [PostMap]
-postsWithStatus s status =
-  postsWhere s ((== Identity status) . (DM.! PostStatus))
+  -> [StatePost]
+postsWithStatus now s status =
+  postsWhere s (fieldEq now PostStatus (Identity status))
 
 numPages ::
   Int
@@ -320,7 +322,7 @@ cGetPost
 cGetPost now env@Env{..} =
   let
     gen s =
-      (fmap . fmap) GetPost $ genId s
+      (fmap . fmap) GetPost (genId s)
     exe (GetPost varId) = do
       let
         get = getPost (auth env) (concrete varId)
@@ -346,22 +348,40 @@ postsEq ::
 postsEq now s m =
   let
     f :: PostKey a -> Identity a -> m (Const () a)
-    f ka = const $ Const () <$ fieldsEq now ka s m
+    f ka = const $ Const () <$ fieldsEqTest now ka s m
   in
     void . DM.traverseWithKey f . getStatePost $ s
 
 fieldsEq ::
+  LocalTime
+  -> PostKey a
+  -> StatePost
+  -> PostMap
+  -> Bool
+fieldsEq now k s m =
+  fieldEq now k (m DM.! k) s
+
+fieldEq ::
+  LocalTime
+  -> PostKey a
+  -> Identity a
+  -> StatePost
+  -> Bool
+fieldEq now k a s =
+  let
+    matches = eqTagged k k a
+  in
+    any matches $ expected now k s
+
+fieldsEqTest ::
   MonadTest m
   => LocalTime
   -> PostKey a
   -> StatePost
   -> PostMap
   -> m ()
-fieldsEq now k s m =
-  let
-    matches = eqTagged k k $ m DM.! k
-  in
-    assert . any matches $ expected now k s
+fieldsEqTest now k s m =
+  assert $ fieldsEq now k s m
 
 expected ::
   LocalTime
@@ -606,12 +626,9 @@ genDelete ::
   => state Symbolic
   -> Maybe (n (DeletePost Symbolic))
 genDelete s =
-  let
-    genId = Gen.element (s ^. posts . to M.keys)
-  in
-    if s ^. posts & not . null
-      then Just $ DeletePost <$> genId <*> Gen.maybe Gen.bool
-      else Nothing
+  if s ^. posts & not . null
+    then fmap (flip DeletePost <$> Gen.maybe Gen.bool <*>) (genId s)
+    else Nothing
 
 postFieldAt ::
   ( HasPosts state
