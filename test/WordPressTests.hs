@@ -472,8 +472,6 @@ genPost s = do
   excerpt' <- T.take <$> Gen.int (Range.linear 1 (T.length content - 1)) <*> pure content
   status <- Gen.filter (/= Trash) Gen.enumBounded
   let
-    -- If something is marked for publishing in the future then make sure our date is at least a
-    -- day away so its status doesn't change during testing.
     excerpt = bool content excerpt' (T.null excerpt')
     genSlug = Gen.filter (not . existsPostWithSlug s) . fmap mkSlug $ genAlpha 1 300
     gensI = [
