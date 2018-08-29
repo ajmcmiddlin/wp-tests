@@ -16,6 +16,8 @@ WP-TEST
     We want deployment to be fully automated. The dumb but easy thing to do would be to write a
     script that always reboots after running the first `deploy`, and then deploys again.
 
+** TODO Check if we can remove unordered-containers dep
+
 ** TODO Query IP address
 
     Ideally we would query `nixops` to find out the IP of the deployed machine rather than manually
