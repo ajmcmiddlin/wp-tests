@@ -253,7 +253,6 @@ genList
   => state Symbolic
   -> n (ListPosts v)
 genList s = do
-  status <- Gen.enumBounded
   perPage <- Gen.int (Range.linear 1 100)
   let
     numPosts = s ^. posts & length
@@ -262,7 +261,6 @@ genList s = do
   pure . ListPosts DM.empty $ DM.fromList [
       ListPostsPerPage ==> perPage
     , ListPostsPage ==> page
-    , ListPostsStatus ==> status
     ]
 
 genListAuth
