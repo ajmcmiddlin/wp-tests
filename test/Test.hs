@@ -15,7 +15,7 @@ import           System.Process           (readProcess)
 
 import           Test.Tasty               (defaultMain, testGroup)
 
-import           Types                    (Env (..))
+import           Web.WordPress.Test.Types (Env (..))
 import           WordPressTests           (wordpressTests)
 
 main :: IO ()

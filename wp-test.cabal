@@ -48,7 +48,7 @@ library
   ghc-options:         -Wall -Wredundant-constraints
 
 test-suite state-tests
-  other-modules:       Types
+  other-modules:       Web.WordPress.Test.Types
                        WordPressTests
                        Data.Time.Extras
   build-depends:       base >=4.10 && <4.11

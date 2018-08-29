@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Types where
+module Web.WordPress.Test.Types where
 
 import           Control.Lens             (Lens', Rewrapped, Wrapped, lens)
 import           Data.ByteString          (ByteString)

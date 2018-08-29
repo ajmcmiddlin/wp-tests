@@ -76,7 +76,7 @@ import           Web.WordPress.Types.Post      (Author (Author),
                                                 Status (..), mkCreatePR,
                                                 mkCreateR, mkSlug, trashSlug)
 
-import           Types                         (Env (..), HasPosts (posts),
+import           Web.WordPress.Test.Types      (Env (..), HasPosts (posts),
                                                 StatePost (StatePost),
                                                 WPState (WPState), getStatePost,
                                                 hasKeyMatchingPredicate)
